@@ -23,11 +23,11 @@
 
     numpy配置
         
-        pip3 install -i https://pypi.tuna.tsinghua.edu.cn/simple numpy
+        pip3 install -i https://pypi.tuna.tsinghua.edu.cn/simple numpy==2.1.2
     
     pandas配置
 
-        pip3 install -i https://pypi.tuna.tsinghua.edu.cn/simple pandas
+        pip3 install -i https://pypi.tuna.tsinghua.edu.cn/simple pandas==2.3.2
 
     pillow配置
 
@@ -39,7 +39,7 @@
 
     tqdm配置
 
-        pip3 install -i https://pypi.tuna.tsinghua.edu.cn/simple tqdm
+        pip3 install -i https://pypi.tuna.tsinghua.edu.cn/simple tqdm==4.67.1
 
     opencv配置
 
