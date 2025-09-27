@@ -50,5 +50,8 @@
         
         pip3 install -i https://pypi.tuna.tsinghua.edu.cn/simple albumentations
 
+    sklearn配置
+
+        pip3 install -i https://pypi.tuna.tsinghua.edu.cn/simple scikit-learn==1.7.2
     
 
