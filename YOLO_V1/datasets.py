@@ -103,9 +103,78 @@ class YOLOPascalVocDataset(Dataset):
             resizedBoundingBoxes.append((name, (resizedXMin, resizedYMin, resizedXMax, resizedYMax)))
 
 
-        utils.visualize_image_and_label(originalData, augmentationData, resizedBoundingBoxes)
+        # utils.visualize_image_and_label(originalData, augmentationData, resizedBoundingBoxes)
 
-        return originalData, augmentationData
+        # 初始化跟踪字典和ground truth张量
+        boundingBoxes = {}      # 跟踪每个网格单元格已分配的边界框数量
+        classNames = {}     # 跟踪每个网格单元格分配的类别
+        depth = 5 * config_parameter.B + config_parameter.C     # 张量深度：B个边界框×5个参数 + C个类别
+        groundTruth = torch.zeros((config_parameter.S, config_parameter.S, depth))
+
+        # 计算网格尺寸
+        gridSizeX = config_parameter.IMAGE_SIZE[0] / config_parameter.S  # 每个网格的宽度
+        gridSizeY = config_parameter.IMAGE_SIZE[1] / config_parameter.S  # 每个网格的高度
+
+
+
+        # 处理每个边界框，构建ground truth张量
+        for name, coords in resizedBoundingBoxes:
+            # 获取类别索引 - 添加错误处理
+            if name not in self.classes:
+                print(f"Warning: Unrecognized class '{name}' in image {self.imagesName[item]}. Skipping this object.")
+                continue
+
+            classIndex = self.classes[name]
+            xMin, yMin, xMax, yMax = coords
+
+            # 计算边界框中心点坐标
+            midX = (xMax + xMin) / 2
+            midY = (yMax + yMin) / 2
+
+            # 确定中心点所在的网格单元格
+            col = int(midX // gridSizeX)
+            row = int(midY // gridSizeY)
+
+            # 确保网格缩影在有效范围内
+            if 0 <= col < config_parameter.S and 0 <= row < config_parameter.S:
+                cell = (row, col)
+
+
+                # 如果该网格单元格未被分配类别，或者当前类别与已分配类别相同
+                if cell not in classNames or name == classNames[cell]:
+                    # 创建类别one-hot编码向量
+                    oneHot = torch.zeros(config_parameter.C)
+                    oneHot[classIndex] = 1.0
+
+                    # 将类别信息写入ground truth张量的前C个通道
+                    groundTruth[row, col, :config_parameter.C] = oneHot
+                    classNames[cell] = name
+
+                    # 获取当前网格单元格已分配的边界框数量
+                    bboxIndex = boundingBoxes.get(cell, 0)
+
+                    # 如果还有可用的边界框槽位
+                    if bboxIndex < config_parameter.B:
+                        # 计算边界框相对于网格单元格的归一化坐标
+                        bboxTruth = (
+                            (midX - col * gridSizeX) / gridSizeX,  # X坐标相对于网格的偏移
+                            (midY - row * gridSizeY) / gridSizeY,  # Y坐标相对于网格的偏移
+                            (xMax - xMin) / config_parameter.IMAGE_SIZE[0],  # 宽度相对于图像的比率
+                            (yMax - yMin) / config_parameter.IMAGE_SIZE[1],  # 高度相对于图像的比率
+                            1.0  # 置信度（有目标）
+                        )
+
+                        # 计算当前边界框在张量中的起始位置
+                        bbox_start = config_parameter.C + 5 * bboxIndex
+
+                        # 将当前边界框信息写入ground truth张量
+                        groundTruth[row, col, bbox_start:bbox_start + 5] = torch.tensor(bboxTruth)
+
+                        # 更新该网格单元格的边界框计数
+                        boundingBoxes[cell] = bboxIndex + 1
+
+
+        return originalData, augmentationData, groundTruth
 
 
 
@@ -164,9 +233,16 @@ def main():
     os.makedirs('visualization', exist_ok=True)
     # 可视化一下加载的数据集
     with tqdm(total=len(trainDataLoader)+len(valDataLoader), desc="数据集可视化中") as pbarDataloader:
-        for batchIndex, (originalData, augmentationData) in enumerate(trainDataLoader):
+        # 训练集
+        for batchIndex, (originalData, augmentationData, targets) in enumerate(trainDataLoader):
             for i in range(config_parameter.BATCH_SIZE):
-                print('i')
+                print(targets.shape)
+            pbarDataloader.update(1)
+
+        # 验证集
+        for batchIndex, (originalData, augmentationData, targets) in enumerate(valDataLoader):
+            for i in range(config_parameter.BATCH_SIZE):
+                print(targets.shape)
             pbarDataloader.update(1)
 
 

@@ -25,10 +25,16 @@ def load_train_classes():
     for root, dirs, files in os.walk(readClassPath):
         for nowFile in files:
             splitList = nowFile.split('_')
-            if splitList[0] not in classNames and len(splitList) == 2 and splitList[0] != 'train' and splitList[0] != 'val':
+            if splitList[0] not in classNames and len(splitList) == 2 and splitList[0] != 'val':
                 classNames.append(splitList[0])
 
-    return classNames
+    # 对类别名称进行排序以确保一致性
+    classNames.sort()
+
+    # 转换为字典形式：{class_name: index}
+    class_dict = {class_name: idx for idx, class_name in enumerate(classNames)}
+
+    return class_dict
 
 
 

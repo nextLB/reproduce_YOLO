@@ -8,7 +8,7 @@
 IMAGE_SIZE = (448, 448)
 S = 7       # Divide each image into a SxS grid
 B = 2       # Number of bounding boxes to predict
-C = 19      # Number of classes in the dataset
+C = 20      # Number of classes in the dataset
 
 
 # 训练集与验证集的比例配置
