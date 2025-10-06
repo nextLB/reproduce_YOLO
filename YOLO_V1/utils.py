@@ -139,66 +139,105 @@ def visualize_image_and_label(originalImage, augmentationImage, boundingBoxes):
     plt.show()
 
 
-
-
 def get_iou(p, a):
-    p_tl, p_br = bbox_to_coords(p)      # (batch, S, S, B, 2)
-    a_tl, a_br = bbox_to_coords(a)
+    """
+    计算预测边界框和真实边界框之间的交并比(IOU)
 
-    # Largest top-left corner and smallest bottom-right corner give the intersection
+    Args:
+        p: 预测边界框张量
+        a: 真实边界框张量
+
+    Returns:
+        iou: IOU值，形状为 (batch, S, S, B, B)
+    """
+    # 将边界框格式从 [x, y, width, height] 转换为角点坐标 [x1, y1, x2, y2]
+    p_tl, p_br = bbox_to_coords(p)  # 预测框的左上角和右下角坐标
+    a_tl, a_br = bbox_to_coords(a)  # 真实框的左上角和右下角坐标
+
+    # 计算交集的左上角和右下角坐标
+    # 交集左上角 = 两个框左上角坐标的最大值
+    # 交集右下角 = 两个框右下角坐标的最小值
     coordsJoinSize = (-1, -1, -1, config_parameter.B, config_parameter.B, 2)
     tl = torch.max(
-        p_tl.unsqueeze(4).expand(coordsJoinSize),       # (batch, S, S, B, 1, 2) -> (batch, S, S, B, B, 2)
-        a_tl.unsqueeze(3).expand(coordsJoinSize)        # (batch, S, S, 1, B, 2) -> (batch, S, S, B, B, 2)
+        p_tl.unsqueeze(4).expand(coordsJoinSize),  # 扩展维度以进行广播计算
+        a_tl.unsqueeze(3).expand(coordsJoinSize)  # 扩展维度以进行广播计算
     )
     br = torch.min(
         p_br.unsqueeze(4).expand(coordsJoinSize),
         a_br.unsqueeze(3).expand(coordsJoinSize)
     )
 
+    # 计算交集区域的宽和高，并确保非负
     intersectionSides = torch.clamp(br - tl, min=0.0)
-    intersection = intersectionSides[..., 0] * intersectionSides[..., 1]        # (batch, S, S, B, B)
+    # 计算交集面积
+    intersection = intersectionSides[..., 0] * intersectionSides[..., 1]
 
-    pArea = bbox_attr(p, 2) * bbox_attr(p, 3)       # (batch, S, S, B)
-    pArea = pArea.unsqueeze(4).expand_as(intersection)  # (batch, S, S, B, 1) -> (batch, S, S, B, B)
+    # 计算预测框的面积
+    pArea = bbox_attr(p, 2) * bbox_attr(p, 3)  # width * height
+    pArea = pArea.unsqueeze(4).expand_as(intersection)  # 扩展维度以匹配IOU计算
 
-    aArea = bbox_attr(a, 2) * bbox_attr(a, 3)       # (batch, S, S, B)
-    aArea = aArea.unsqueeze(4).expand_as(intersection)      # (batch, S, S, 1, B) -> (batch, S, S, B, B)
+    # 计算真实框的面积
+    aArea = bbox_attr(a, 2) * bbox_attr(a, 3)  # width * height
+    aArea = aArea.unsqueeze(4).expand_as(intersection)  # 扩展维度以匹配IOU计算
 
+    # 计算并集面积
     union = pArea + aArea - intersection
 
-    # Catch division-by-zero
+    # 处理除零情况：当并集面积为0时，避免除以0
     zeroUnions = (union == 0.0)
-    union[zeroUnions] = config_parameter.EPSILON
-    intersection[zeroUnions] = 0.0
+    union[zeroUnions] = config_parameter.EPSILON  # 使用一个很小的值替代0
+    intersection[zeroUnions] = 0.0  # 对应的交集设为0
 
+    # 返回IOU = 交集面积 / 并集面积
     return intersection / union
 
 
-
 def bbox_to_coords(t):
-    """Changes format of bounding boxes from [x, y, width, height] to ([x1, y1], [x2, y2])."""
+    """
+    将边界框格式从 [x, y, width, height] 转换为角点坐标 ([x1, y1], [x2, y2])
 
+    Args:
+        t: 输入边界框张量，格式为 [x, y, width, height]
+
+    Returns:
+        infoOne: 左上角坐标 [x1, y1]
+        infoTwo: 右下角坐标 [x2, y2]
+    """
+    # 提取宽度和x中心坐标
     width = bbox_attr(t, 2)
     x = bbox_attr(t, 0)
+    # 计算左右边界
     x1 = x - width / 2.0
     x2 = x + width / 2.0
 
+    # 提取高度和y中心坐标
     height = bbox_attr(t, 3)
     y = bbox_attr(t, 1)
+    # 计算上下边界
     y1 = y - height / 2.0
     y2 = y + height / 2.0
 
-    infoOne = torch.stack((x1, y1), dim=4)
-    infoTwo = torch.stack((x2, y2), dim=4)
+    # 堆叠坐标形成角点表示
+    infoOne = torch.stack((x1, y1), dim=4)  # 左上角坐标
+    infoTwo = torch.stack((x2, y2), dim=4)  # 右下角坐标
 
     return infoOne, infoTwo
 
 
-
 def bbox_attr(data, i):
-    """Returns the Ith attribute of each bounding box in data."""
+    """
+    从数据张量中提取所有边界框的第i个属性
+
+    Args:
+        data: 输入数据张量，形状为 (..., B*5 + C)
+        i: 要提取的属性索引 (0:x, 1:y, 2:width, 3:height, 4:confidence)
+
+    Returns:
+        指定属性的张量
+    """
+    # 计算属性在张量中的起始位置: C + i
     attrStart = config_parameter.C + i
+    # 使用切片操作提取所有边界框的指定属性
     return data[..., attrStart::5]
 
 
