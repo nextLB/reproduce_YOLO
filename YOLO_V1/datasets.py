@@ -227,6 +227,7 @@ def main():
         drop_last=True  # 不保留最后一个不完整批次
     )
 
+    #
     # os.makedirs('visualization', exist_ok=True)
     # # 可视化一下加载的数据集
     # with tqdm(total=len(trainDataLoader)+len(valDataLoader), desc="数据集可视化中") as pbarDataloader:
