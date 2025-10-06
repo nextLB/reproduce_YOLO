@@ -165,7 +165,14 @@ def get_iou(p, a):
     aArea = bbox_attr(a, 2) * bbox_attr(a, 3)       # (batch, S, S, B)
     aArea = aArea.unsqueeze(4).expand_as(intersection)      # (batch, S, S, 1, B) -> (batch, S, S, B, B)
 
+    union = pArea + aArea - intersection
 
+    # Catch division-by-zero
+    zeroUnions = (union == 0.0)
+    union[zeroUnions] = config_parameter.EPSILON
+    intersection[zeroUnions] = 0.0
+
+    return intersection / union
 
 
 
