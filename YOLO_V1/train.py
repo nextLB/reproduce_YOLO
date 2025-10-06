@@ -11,6 +11,7 @@ from datetime import datetime
 import models
 import config_parameter
 from loss import SumSquaredErrorLoss
+import datasets
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -24,7 +25,6 @@ def main():
     now = datetime.now()
 
 
-
     model = models.YOLOv1ResNet().to(device)
     lossFunction = SumSquaredErrorLoss()
 
@@ -35,7 +35,67 @@ def main():
         lr=config_parameter.LEARNING_RATE
     )
 
+    # Learning rate scheduler (NOT NEEDED)
+    # scheduler = torch.optim.lr_scheduler.LambdaLR(
+    #     optimizer,
+    #     lr_lambda=utils.scheduler_lambda
+    # )
 
+    # Load the dataset
+    trainDataLoader, valDataLoader = datasets.main()
+
+    # Create folders
+    root = os.path.join(
+        'models',
+        'yolo_v1',
+        now.strftime('%m_%d_%Y'),
+        now.strftime('%H_%M_%S')
+    )
+    weightDir = os.path.join(root, 'weights')
+    if not os.path.isdir(weightDir):
+        os.makedirs(weightDir)
+
+    # Metrics
+    train_losses = np.empty((2, 0))
+    test_losses = np.empty((2, 0))
+    train_errors = np.empty((2, 0))
+    test_errors = np.empty((2, 0))
+
+    def save_metrics():
+        np.save(os.path.join(root, 'train_losses'), train_losses)
+        np.save(os.path.join(root, 'test_losses'), test_losses)
+        np.save(os.path.join(root, 'train_errors'), train_errors)
+        np.save(os.path.join(root, 'test_errors'), test_errors)
+
+
+    #####################
+    #       Train       #
+    #####################
+    for epoch in tqdm(range(config_parameter.MAX_EPOCHS), desc='Epoch'):
+        model.train()
+        trainLoss = 0
+        for originalData, augmentationData, groundTruth in tqdm(trainDataLoader, desc='Train', leave=False):
+            data = augmentationData.to(device)
+            labels = groundTruth.to(device)
+
+            optimizer.zero_grad()
+            predictions = model.forward(data)
+            loss = lossFunction(predictions, labels)
+            loss.backward()
+            optimizer.step()
+
+            trainLoss += loss.item() / len(trainDataLoader)
+            del data, labels
+
+        # Step and graph scheduler once an epoch
+        # writer.add_scalar('Learning Rate', scheduler.get_last_lr()[0], epoch)
+        # scheduler.step()
+
+        train_losses = np.append(train_losses, [[epoch], [trainLoss]], axis=1)
+        writer.add_scalar('Loss/train', trainLoss, epoch)
+
+    save_metrics()
+    torch.save(model.state_dict(), os.path.join(weightDir, 'final'))
 
 
 if __name__ == '__main__':

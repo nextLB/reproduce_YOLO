@@ -182,8 +182,6 @@ class YOLOPascalVocDataset(Dataset):
 
 
 
-
-
 def main():
     fullDatasets = YOLOPascalVocDataset('train')
 

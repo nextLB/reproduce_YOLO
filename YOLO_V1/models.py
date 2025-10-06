@@ -4,6 +4,7 @@
 import torch
 import torch.nn as nn
 from torchvision.models import resnet50, ResNet50_Weights
+from torchvision.models import resnet34, ResNet34_Weights
 import config_parameter
 
 
@@ -15,8 +16,23 @@ class YOLOv1ResNet(nn.Module):
         super().__init__()
         self.depth = config_parameter.B * 5 + config_parameter.C
 
-        # Load backbone ResNet
-        backbone = resnet50(weights=ResNet50_Weights.DEFAULT)
+        # # Load backbone ResNet
+        # backbone = resnet50(weights=ResNet50_Weights.DEFAULT)
+        # backbone.requires_grad_(False)      # Freeze backbone weights
+        #
+        # # Delete last two layers and attach detection layers
+        # backbone.avgpool = nn.Identity()
+        # backbone.fc = nn.Identity()
+        #
+        # self.model = nn.Sequential(
+        #     backbone,
+        #     Reshape(2048, 14, 14),
+        #     DetectionNet(2048)      # 4 conv, 2 linear
+        # )
+
+
+        # Load backbone ResNet34
+        backbone = resnet34(weights=ResNet34_Weights.DEFAULT)
         backbone.requires_grad_(False)      # Freeze backbone weights
 
         # Delete last two layers and attach detection layers
@@ -25,8 +41,8 @@ class YOLOv1ResNet(nn.Module):
 
         self.model = nn.Sequential(
             backbone,
-            Reshape(2048, 14, 14),
-            DetectionNet(2048)
+            Reshape(512, 14, 14),  # ResNet34的输出通道数是512，不是2048
+            DetectionNet(512)       # 输入通道数改为512
         )
 
     def forward(self, x):
