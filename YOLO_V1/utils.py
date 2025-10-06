@@ -141,7 +141,57 @@ def visualize_image_and_label(originalImage, augmentationImage, boundingBoxes):
 
 
 
+def get_iou(p, a):
+    p_tl, p_br = bbox_to_coords(p)      # (batch, S, S, B, 2)
+    a_tl, a_br = bbox_to_coords(a)
+
+    # Largest top-left corner and smallest bottom-right corner give the intersection
+    coordsJoinSize = (-1, -1, -1, config_parameter.B, config_parameter.B, 2)
+    tl = torch.max(
+        p_tl.unsqueeze(4).expand(coordsJoinSize),       # (batch, S, S, B, 1, 2) -> (batch, S, S, B, B, 2)
+        a_tl.unsqueeze(3).expand(coordsJoinSize)        # (batch, S, S, 1, B, 2) -> (batch, S, S, B, B, 2)
+    )
+    br = torch.min(
+        p_br.unsqueeze(4).expand(coordsJoinSize),
+        a_br.unsqueeze(3).expand(coordsJoinSize)
+    )
+
+    intersectionSides = torch.clamp(br - tl, min=0.0)
+    intersection = intersectionSides[..., 0] * intersectionSides[..., 1]        # (batch, S, S, B, B)
+
+    pArea = bbox_attr(p, 2) * bbox_attr(p, 3)       # (batch, S, S, B)
+    pArea = pArea.unsqueeze(4).expand_as(intersection)  # (batch, S, S, B, 1) -> (batch, S, S, B, B)
+
+    aArea = bbox_attr(a, 2) * bbox_attr(a, 3)       # (batch, S, S, B)
+    aArea = aArea.unsqueeze(4).expand_as(intersection)      # (batch, S, S, 1, B) -> (batch, S, S, B, B)
 
 
+
+
+
+def bbox_to_coords(t):
+    """Changes format of bounding boxes from [x, y, width, height] to ([x1, y1], [x2, y2])."""
+
+    width = bbox_attr(t, 2)
+    x = bbox_attr(t, 0)
+    x1 = x - width / 2.0
+    x2 = x + width / 2.0
+
+    height = bbox_attr(t, 3)
+    y = bbox_attr(t, 1)
+    y1 = y - height / 2.0
+    y2 = y + height / 2.0
+
+    infoOne = torch.stack((x1, y1), dim=4)
+    infoTwo = torch.stack((x2, y2), dim=4)
+
+    return infoOne, infoTwo
+
+
+
+def bbox_attr(data, i):
+    """Returns the Ith attribute of each bounding box in data."""
+    attrStart = config_parameter.C + i
+    return data[..., attrStart::5]
 
 

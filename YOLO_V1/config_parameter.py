@@ -18,6 +18,7 @@ RATIO = 0.3
 # 训练时的参数配置
 BATCH_SIZE = 8
 NUM_WORKERS = 8
+LEARNING_RATE = 0.00001
 
 
 
