@@ -47,21 +47,33 @@ class YOLOv1ResNet(nn.Module):
         # )
 
         # Load backbone ResNet18 - 更小的模型
-        backbone = resnet18(weights=ResNet18_Weights.DEFAULT)
-        backbone.requires_grad_(False)      # Freeze backbone weights
+        self.backbone = resnet18(weights=ResNet18_Weights.DEFAULT)
+        self.backbone.requires_grad_(False)      # Freeze backbone weights
 
         # Delete last two layers and attach detection layers
-        backbone.avgpool = nn.Identity()
-        backbone.fc = nn.Identity()
+        self.backbone.avgpool = nn.Identity()
+        self.backbone.fc = nn.Identity()
 
-        self.model = nn.Sequential(
-            backbone,
-            Reshape(512, 14, 14),  # ResNet18的输出通道数也是512
-            DetectionNet(512)       # 输入通道数保持512
-        )
+        self.backboneReshape = Reshape(512, 14, 14) # ResNet18的输出通道数也是512
+        self.detectionNet = DetectionNet(512)       # 输入通道数保持512
+
+        # 特征恒等映射层 用于捕捉训练过程中的特征图像
+        self.backbone_before_identity = nn.Identity()
+        self.reshape_after_identity = nn.Identity()
+        self.detectionNet_after_identity = nn.Identity()
 
     def forward(self, x):
-        out = self.model.forward(x)
+        # backbone
+        x = self.backbone_before_identity(x)
+        x = self.backbone(x)
+
+        # reshape
+        x = self.backboneReshape(x)
+        x = self.reshape_after_identity(x)
+
+        # detection net
+        out = self.detectionNet(x)
+        out = self.detectionNet_after_identity(out)
         return out
 
 

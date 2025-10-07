@@ -3,9 +3,7 @@
     YOLOV1 数据集的相关配置
 """
 import os.path
-
 import torch
-
 import config_path
 import config_parameter
 import utils

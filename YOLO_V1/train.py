@@ -12,10 +12,18 @@ import models
 import config_parameter
 from loss import SumSquaredErrorLoss
 import datasets
+from feature_maps import MyFeatureMapHook
 
+saveFeatureMapsPath = './feature_maps'
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+# 在这里定义一下要可视化的特征层
+targetLayers = [
+    'backbone_before_identity',
+    'reshape_after_identity',
+    'detectionNet_after_identity'
+]
 
 
 def main():
@@ -74,17 +82,34 @@ def main():
     for epoch in tqdm(range(config_parameter.MAX_EPOCHS), desc='Epoch'):
         model.train()
         trainLoss = 0
+        batchIdx = 0
         for originalData, augmentationData, groundTruth in tqdm(trainDataLoader, desc='Train', leave=False):
             data = augmentationData.to(device)
             labels = groundTruth.to(device)
 
+            # TODO: 注册特征层
+            if epoch % 10 == 0 and batchIdx % 100 == 0:
+                # initial feature hook
+                hookHandler = MyFeatureMapHook(model,
+                                               outputDir=f"{saveFeatureMapsPath}/epoch_{epoch}_batchIndex_{batchIdx}",
+                                               imgIndex=0)
+                hookHandler.register_hooks(targetLayers)
+
             optimizer.zero_grad()
             predictions = model.forward(data)
+
+            # TODO: 保存特征层
+            if epoch % 10 == 0 and batchIdx % 100 == 0:
+                # save feature maps
+                hookHandler.save_feature_maps()
+                hookHandler.remove_hooks()
+
             loss = lossFunction(predictions, labels)
             loss.backward()
             optimizer.step()
 
             trainLoss += loss.item() / len(trainDataLoader)
+            batchIdx += 1
             del data, labels
 
         # Step and graph scheduler once an epoch
