@@ -12,7 +12,7 @@ from utils import get_iou, bbox_attr
 import config_parameter
 
 
-
+# 详细的YOLO损失函数计算过程的例子可见我的READ.md文件中的内容
 class SumSquaredErrorLoss(nn.Module):
     def __init__(self):
         super().__init__()
@@ -29,6 +29,8 @@ class SumSquaredErrorLoss(nn.Module):
             a: 真实标签张量 (anchor/ground truth)，形状与p相同
         Returns:
             total_loss: 总损失值
+
+            损失值的组成为: 坐标损失+边界框尺寸损失+置信度损失+类别损失
         """
 
         # Calculate IOU of each predicted bbox against the ground truth
