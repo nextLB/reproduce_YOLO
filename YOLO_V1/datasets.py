@@ -39,7 +39,7 @@ trainTransformer = T.Compose([
 
 # VOC 2007相关数据获取可访问仓库 git@github.com:nextLB/VOC2007.git 进行拉取
 class YOLOPascalVocDataset(Dataset):
-    def __init__(self, setType):
+    def __init__(self, setType, transform):
         assert setType in {'train', 'test'}
 
         # 加载所有类别标签
@@ -47,6 +47,8 @@ class YOLOPascalVocDataset(Dataset):
         # 加载与处理数据集路径
         self.imagesName = utils.load_train_images_name()
         self.labelsName = utils.load_train_labels_name()
+
+        self.transform = transform
 
 
 
@@ -62,7 +64,7 @@ class YOLOPascalVocDataset(Dataset):
         originalData = imageData.copy()
         originalWidth, originalHeight = originalData.size
 
-        augmentationData = trainTransformer(imageData)
+        augmentationData = self.transform(imageData)
         originalData = baseTransformer(originalData)
 
 
@@ -183,7 +185,7 @@ class YOLOPascalVocDataset(Dataset):
 
 
 def main():
-    fullDatasets = YOLOPascalVocDataset('train')
+    fullDatasets = YOLOPascalVocDataset('train', baseTransformer)
 
     # 划分索引，整理出训练集与验证集
     indices = list(range(len(fullDatasets)))
@@ -197,6 +199,7 @@ def main():
     trainDatasets = Subset(
         YOLOPascalVocDataset(
             'train',
+            trainTransformer
         ),
         trainIndices
     )
@@ -204,6 +207,7 @@ def main():
     valDatasets = Subset(
         YOLOPascalVocDataset(
             'train',
+            baseTransformer
         ),
         valIndices
     )

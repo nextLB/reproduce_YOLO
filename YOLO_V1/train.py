@@ -94,6 +94,25 @@ def main():
         train_losses = np.append(train_losses, [[epoch], [trainLoss]], axis=1)
         writer.add_scalar('Loss/train', trainLoss, epoch)
 
+
+        if epoch % 4 == 0:
+            model.eval()
+            with torch.no_grad():
+                test_loss = 0
+                for originalData, augmentationData, groundTruth in tqdm(valDataLoader, desc='Test', leave=False):
+                    data = augmentationData.to(device)
+                    labels = groundTruth.to(device)
+
+                    predictions = model.forward(data)
+                    loss = lossFunction(predictions, labels)
+
+                    test_loss += loss.item() / len(valDataLoader)
+                    del data, labels
+            test_losses = np.append(test_losses, [[epoch], [test_loss]], axis=1)
+            writer.add_scalar('Loss/test', test_loss, epoch)
+            save_metrics()
+
+
     save_metrics()
     torch.save(model.state_dict(), os.path.join(weightDir, 'final'))
 
