@@ -43,7 +43,7 @@ def main():
         lr=config_parameter.LEARNING_RATE
     )
 
-    # Learning rate scheduler (NOT NEEDED)
+    # # Learning rate scheduler (NOT NEEDED)
     # scheduler = torch.optim.lr_scheduler.LambdaLR(
     #     optimizer,
     #     lr_lambda=utils.scheduler_lambda
@@ -139,7 +139,7 @@ def main():
 
 
     save_metrics()
-    torch.save(model.state_dict(), os.path.join(weightDir, 'final'))
+    torch.save(model.state_dict(), os.path.join(weightDir, 'final.pth'))
 
 
 if __name__ == '__main__':

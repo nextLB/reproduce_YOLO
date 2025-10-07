@@ -59,7 +59,7 @@
         pip3 install -i https://pypi.tuna.tsinghua.edu.cn/simple tensorboard
 
 
-## YOLO模型的理解关键在于YOLO模型的损失函数的计算
+## YOLOV1模型的理解关键在于YOLOV1模型的损失函数的计算
     下面我用一个实际的例子来说明一下YOLOV1损失函数计算过程
     首先我们需要知道的是关于YOLO信息存储主要包含五个，分别是：X坐标相对于网格的偏移、Y坐标相对于网格的偏移、宽度相对于图像的比率、高度相对于图像的比率、置信度
 
