@@ -3,13 +3,19 @@
 """
 
 import config_paramters
-
+import config_path
+import utils
 
 
 
 
 def main():
-    print('simple test')
+    # 检查数据集
+    utils.check_dataset(config_path.DATASETS_YAML)
+
+    # 构建训练、验证、测试等数据集路径，便于后续的加载与访问
+
+
 
 
 
