@@ -1,6 +1,7 @@
 """
     Yolov3 的数据集构建程序文件
 """
+import os.path
 
 import config_paramters
 import config_path
@@ -14,7 +15,32 @@ class COCODataset(Dataset):
 
         self.datasetPath = datasetPath
         self.imageSize = imageSize
-        print(datasetPath)
+        self.mosaicBorder = [-imageSize//2, -imageSize//2]
+
+        # 用于存储加载图像和标签的路径
+        self.images = []
+        self.labels = []
+
+        imagesDir = os.path.join(datasetPath, 'images/train2017')
+        labelsDir = os.path.join(datasetPath, 'labels/train2017')
+
+        for imageFile in os.listdir(imagesDir):
+            if imageFile.endswith(('.jpg', '.jpeg', '.png')):
+                imagePath = os.path.join(imagesDir, imageFile)
+                labelPath = os.path.join(labelsDir, os.path.splitext(imageFile)[0] + '.txt')
+                if os.path.exists(labelPath):
+                    self.images.append(imagePath)
+                    self.labels.append(labelPath)
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, idx):
+        print(self.images[idx], self.labels[idx])
+
+
+
+
 
 
 def main():
