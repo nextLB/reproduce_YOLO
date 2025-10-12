@@ -6,8 +6,9 @@ import yaml
 import os
 import requests
 import zipfile
-from pathlib import Path
 
+
+# 检查数据集
 def check_dataset(dataYamlPath):
     # 1. 读取YAML文件
     with open(dataYamlPath, 'r', encoding='utf-8') as file:
@@ -75,3 +76,15 @@ def check_dataset(dataYamlPath):
     return data
 
 
+
+# 构建数据集路径
+def create_data_path(dataYamlPath):
+    # 1. 读取YAML文件
+    with open(dataYamlPath, 'r', encoding='utf-8') as file:
+        data = yaml.safe_load(file)
+
+    # 2、构建完整路径
+    data['train'] = os.path.join(data['path'], data['train'])
+    data['val'] = os.path.join(data['path'], data['val'])
+
+    return data
