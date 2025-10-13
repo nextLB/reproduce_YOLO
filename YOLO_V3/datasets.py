@@ -27,7 +27,6 @@ class COCODataset(Dataset):
         self.datasetPath = datasetPath
         self.imageSize = imageSize
         self.classNames = utils.load_class_names_from_yaml(config_path.DATASETS_YAML)
-        self.mosaicBorder = [-imageSize//2, -imageSize//2]
 
         # 用于存储加载图像和标签的路径
         self.images = []
