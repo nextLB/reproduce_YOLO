@@ -6,6 +6,8 @@
 IMAGE_SIZE = 640
 GRID_SIZE = 32
 RATIO = 0.3  # 验证集与训练集的划分比例
+RANDOM_CROP_RATIO = 0.5  # 构建数据集时对于数据进行随机裁剪的比例
+RANDOM_CROP_SCOPE = (0.3, 1)       # 构建数据集时对于数据进行随机裁剪的比例范围
 
 
 # 训练参数配置
