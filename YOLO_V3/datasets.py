@@ -76,15 +76,16 @@ class COCODataset(Dataset):
 
         boxes = np.array(boxes) if boxes else np.zeros((0, 5))
 
-        # # 可视化单个图像与类别
-        # utils.visualize_single_image(
-        #     image, boxes,
-        #     class_names=self.classNames
-        # )
+
 
         # 数据增强
-        self.random_affine(image, boxes, config_paramters.DEGREES, config_paramters.TRANSLATE, config_paramters.SCALE, config_paramters.SHEAR)
+        image, boxes = self.random_affine(image, boxes, config_paramters.DEGREES, config_paramters.TRANSLATE, config_paramters.SCALE, config_paramters.SHEAR)
 
+        # 可视化单个图像与类别
+        utils.visualize_single_image(
+            image, boxes,
+            class_names=self.classNames
+        )
 
     # 以mosaic数据增强的形式加载图像
     def load_image_mosaic(self, idx):
@@ -289,19 +290,21 @@ class COCODataset(Dataset):
             return image, boxes
 
         image = np.array(image)
-        height = image.shape[0] + self.mosaicBorder[0] * 2
-        width = image.shape[1] + self.mosaicBorder[1] * 2
+        height, width = image.shape[:2]
+
+        # 保存原始图像尺寸用于坐标转换
+        orig_h, orig_w = height, width
 
         # 旋转和缩放
         R = np.eye(3)
         a = random.uniform(-degrees, degrees)
         s = random.uniform(1 - scale, 1 + scale)
-        R[:2] = cv2.getRotationMatrix2D(angle=a, center=(image.shape[1] / 2, image.shape[0] / 2), scale=s)
+        R[:2] = cv2.getRotationMatrix2D(angle=a, center=(width / 2, height / 2), scale=s)
 
         # 平移
         T = np.eye(3)
-        T[0, 2] = random.uniform(-translate, translate) * image.shape[1]
-        T[1, 2] = random.uniform(-translate, translate) * image.shape[0]
+        T[0, 2] = random.uniform(-translate, translate) * width
+        T[1, 2] = random.uniform(-translate, translate) * height
 
         # 剪切
         S = np.eye(3)
@@ -309,64 +312,83 @@ class COCODataset(Dataset):
         S[1, 0] = math.tan(random.uniform(-shear, shear) * math.pi / 180)
 
         M = S @ T @ R
-        # opencv 的透视变换函数，作用是将复合变换矩阵M应用到输入图像image上  （旋转、缩放、平移、剪切）
         imw = cv2.warpPerspective(image, M, dsize=(width, height), borderValue=(114, 114, 114))
 
-        print(boxes)
         # 变换边界框
         n = len(boxes)
         if n:
-            # ========== 插入坐标矫正代码 ==========
-            # 交换x1和x2（若x1 > x2）
-            boxes[:, [1, 3]] = np.where((boxes[:, 1] > boxes[:, 3])[:, None], boxes[:, [3, 1]], boxes[:, [1, 3]])
-            # 交换y1和y2（若y1 > y2）
-            boxes[:, [2, 4]] = np.where((boxes[:, 2] > boxes[:, 4])[:, None], boxes[:, [4, 2]], boxes[:, [2, 4]])
-            # =====================================
+            # 将中心点坐标转换为角点坐标
+            center_boxes = boxes.copy()
 
+            # 转换为像素坐标 [class_id, x_center, y_center, width, height] -> 角点坐标
+            x_center = center_boxes[:, 1] * orig_w
+            y_center = center_boxes[:, 2] * orig_h
+            box_width = center_boxes[:, 3] * orig_w
+            box_height = center_boxes[:, 4] * orig_h
 
-            print(f"原始boxes: {boxes}")
+            # 计算角点坐标 [x_min, y_min, x_max, y_max]
+            x_min = x_center - box_width / 2
+            y_min = y_center - box_height / 2
+            x_max = x_center + box_width / 2
+            y_max = y_center + box_height / 2
 
-            w0 = boxes[:, 3] - boxes[:, 1]  # 原始宽度
-            h0 = boxes[:, 4] - boxes[:, 2]  # 原始高度
-            area0 = w0 * h0
-
+            # 准备角点坐标(像素坐标)
             xy = np.ones((n * 4, 3))
-            # 边界框角点
-            xy[:, :2] = boxes[:, [1, 2, 3, 4, 1, 4, 3, 2]].reshape(n * 4, 2)
-            print(f"变换前角点: {xy[:8]}")  # 打印前2个框的角点
 
+            # 四个角点: 左上, 右上, 右下, 左下
+            corners = np.column_stack([
+                x_min, y_min,  # 左上
+                x_max, y_min,  # 右上
+                x_max, y_max,  # 右下
+                x_min, y_max  # 左下
+            ]).reshape(n * 4, 2)
+
+            xy[:, :2] = corners
+
+            # 应用变换
             xy = xy @ M.T
-            print(f"变换后角点: {xy[:8]}")
-
-            xy = (xy[:, :2] / xy[:, 2:3]).reshape(n, 8)
-            print(f"透视除法后角点: {xy[:2]}")
+            xy = (xy[:, :2] / xy[:, 2:3]).reshape(n, 8)  # 透视除法
 
             # 创建新的边界框
             x = xy[:, [0, 2, 4, 6]]
             y = xy[:, [1, 3, 5, 7]]
-            print(f"x坐标: {x[:2]}, y坐标: {y[:2]}")
 
-            xy = np.concatenate((x.min(1), y.min(1), x.max(1), y.max(1))).reshape(4, n).T
-            print(f"新边界框坐标: {xy[:2]}")
+            new_x_min = x.min(1)
+            new_y_min = y.min(1)
+            new_x_max = x.max(1)
+            new_y_max = y.max(1)
 
-            # 应用边界框尺寸过滤
+            # 裁剪到有效范围
+            new_x_min = np.clip(new_x_min, 0, width)
+            new_y_min = np.clip(new_y_min, 0, height)
+            new_x_max = np.clip(new_x_max, 0, width)
+            new_y_max = np.clip(new_y_max, 0, height)
+
+            # 转换回中心点坐标和宽高（归一化）
+            new_x_center = ((new_x_min + new_x_max) / 2) / width
+            new_y_center = ((new_y_min + new_y_max) / 2) / height
+            new_width = (new_x_max - new_x_min) / width
+            new_height = (new_y_max - new_y_min) / height
+
+            # 合并类别信息
             classes = boxes[:, 0]
-            boxes = np.concatenate((classes.reshape(-1, 1), xy), axis=1)
-            print(f"合并后的boxes: {boxes[:2]}")
+            new_boxes = np.column_stack([classes, new_x_center, new_y_center, new_width, new_height])
 
-            boxes[:, [1, 3]] = boxes[:, [1, 3]].clip(0, width)
-            boxes[:, [2, 4]] = boxes[:, [2, 4]].clip(0, height)
-            print(f"clip后的boxes: {boxes[:2]}")
-
-            w = boxes[:, 3] - boxes[:, 1]
-            h = boxes[:, 4] - boxes[:, 2]
+            # 过滤无效边界框
+            w = new_width * width  # 像素宽度
+            h = new_height * height  # 像素高度
             area = w * h
-            ar = np.maximum(w / (h + 1e-16), h / (w + 1e-16))
 
-            print(f"w: {w}, h: {h}, area: {area}, ar: {ar}")
-            i = (w > 2) & (h > 2) & (area / (area0 + 1e-16) > 0.05) & (ar < 20)
-            boxes = boxes[i]
-        print(boxes)
+            # 原始边界框面积（用于比较）
+            orig_area = (box_width * box_height)
+
+            # 使用绝对像素尺寸进行过滤
+            i = (w > 2) & (h > 2) & (area / (orig_area + 1e-16) > 0.05) & (
+                        np.maximum(w / (h + 1e-16), h / (w + 1e-16)) < 20)
+            boxes = new_boxes[i]
+
+        return Image.fromarray(imw), boxes
+
 
 def main():
 
