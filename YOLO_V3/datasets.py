@@ -2,6 +2,10 @@
     Yolov3 的数据集构建程序文件
 """
 import os.path
+
+import cv2
+import torch
+import math
 import config_paramters
 import config_path
 import utils
@@ -12,6 +16,7 @@ from tqdm import tqdm
 import random
 import numpy as np
 from PIL import Image
+import torchvision.transforms as transforms
 
 
 
@@ -43,10 +48,43 @@ class COCODataset(Dataset):
         return len(self.images)
 
     def __getitem__(self, idx):
-        # 以mosaic数据增强的形式加载图像
-        self.load_image_mosaic(idx)
 
-        return idx
+        # 以mosaic数据增强的形式加载图像
+        image, targets = self.load_image_mosaic(idx)
+
+        # 以普通形式加载图像
+        self.load_image_ordinary(idx)
+
+
+        return image, targets
+
+    # 以普通形式加载图像
+    def load_image_ordinary(self, idx):
+
+        # 加载图像
+        imgPath = self.images[idx]
+        image = Image.open(imgPath).convert('RGB')
+        originalSize = image.size  # (width, height)
+
+        # 加载标签
+        labelPath = self.labels[idx]
+        boxes = []
+        with open(labelPath, 'r') as f:
+            for line in f.readlines():
+                class_id, x_center, y_center, width, height = map(float, line.strip().split())
+                boxes.append([class_id, x_center, y_center, width, height])
+
+        boxes = np.array(boxes) if boxes else np.zeros((0, 5))
+
+        # # 可视化单个图像与类别
+        # utils.visualize_single_image(
+        #     image, boxes,
+        #     class_names=self.classNames
+        # )
+
+        # 数据增强
+        self.random_affine(image, boxes, config_paramters.DEGREES, config_paramters.TRANSLATE, config_paramters.SCALE, config_paramters.SHEAR)
+
 
     # 以mosaic数据增强的形式加载图像
     def load_image_mosaic(self, idx):
@@ -130,7 +168,29 @@ class COCODataset(Dataset):
 
         # 随机裁剪
         mosaicImage, mosaicBoxes = self.random_crop(mosaicImage, mosaicBoxes)
-        utils.visualize_mosaic(mosaicImage,  mosaic_boxes=mosaicBoxes, class_names=self.classNames)
+
+        # 调整大小
+        mosaicImage = Image.fromarray(mosaicImage)
+        mosaicImage, mosaicBoxes = self.resize(mosaicImage, np.array(mosaicBoxes),
+                                                   mosaicImage.size)
+
+        # # 可视化整个mosaic图像
+        # utils.visualize_mosaic(mosaicImage,  mosaic_boxes=mosaicBoxes, class_names=self.classNames)
+
+        # 将处理过的数据转换为tensor
+        imageTensor = transforms.ToTensor()(mosaicImage)
+
+        # 填充
+        paddedImage = torch.zeros(3, self.imageSize, self.imageSize)
+        _, h, w = imageTensor.shape
+        paddedImage[:, :h, :w] = imageTensor
+
+        targets = torch.zeros((config_paramters.TARGETS_SIZE, 6))
+        if len(mosaicBoxes) > 0:
+            targets[:len(mosaicBoxes), 1:] = torch.from_numpy(mosaicBoxes)
+            targets[:, 0] = idx
+
+        return paddedImage, targets
 
 
 
@@ -223,6 +283,91 @@ class COCODataset(Dataset):
         return croppedImg, newBoxes
 
 
+    # 随机仿射变换
+    def random_affine(self, image, boxes, degrees, translate, scale, shear):
+        if random.random() < 0.5:
+            return image, boxes
+
+        image = np.array(image)
+        height = image.shape[0] + self.mosaicBorder[0] * 2
+        width = image.shape[1] + self.mosaicBorder[1] * 2
+
+        # 旋转和缩放
+        R = np.eye(3)
+        a = random.uniform(-degrees, degrees)
+        s = random.uniform(1 - scale, 1 + scale)
+        R[:2] = cv2.getRotationMatrix2D(angle=a, center=(image.shape[1] / 2, image.shape[0] / 2), scale=s)
+
+        # 平移
+        T = np.eye(3)
+        T[0, 2] = random.uniform(-translate, translate) * image.shape[1]
+        T[1, 2] = random.uniform(-translate, translate) * image.shape[0]
+
+        # 剪切
+        S = np.eye(3)
+        S[0, 1] = math.tan(random.uniform(-shear, shear) * math.pi / 180)
+        S[1, 0] = math.tan(random.uniform(-shear, shear) * math.pi / 180)
+
+        M = S @ T @ R
+        # opencv 的透视变换函数，作用是将复合变换矩阵M应用到输入图像image上  （旋转、缩放、平移、剪切）
+        imw = cv2.warpPerspective(image, M, dsize=(width, height), borderValue=(114, 114, 114))
+
+        print(boxes)
+        # 变换边界框
+        n = len(boxes)
+        if n:
+            # ========== 插入坐标矫正代码 ==========
+            # 交换x1和x2（若x1 > x2）
+            boxes[:, [1, 3]] = np.where((boxes[:, 1] > boxes[:, 3])[:, None], boxes[:, [3, 1]], boxes[:, [1, 3]])
+            # 交换y1和y2（若y1 > y2）
+            boxes[:, [2, 4]] = np.where((boxes[:, 2] > boxes[:, 4])[:, None], boxes[:, [4, 2]], boxes[:, [2, 4]])
+            # =====================================
+
+
+            print(f"原始boxes: {boxes}")
+
+            w0 = boxes[:, 3] - boxes[:, 1]  # 原始宽度
+            h0 = boxes[:, 4] - boxes[:, 2]  # 原始高度
+            area0 = w0 * h0
+
+            xy = np.ones((n * 4, 3))
+            # 边界框角点
+            xy[:, :2] = boxes[:, [1, 2, 3, 4, 1, 4, 3, 2]].reshape(n * 4, 2)
+            print(f"变换前角点: {xy[:8]}")  # 打印前2个框的角点
+
+            xy = xy @ M.T
+            print(f"变换后角点: {xy[:8]}")
+
+            xy = (xy[:, :2] / xy[:, 2:3]).reshape(n, 8)
+            print(f"透视除法后角点: {xy[:2]}")
+
+            # 创建新的边界框
+            x = xy[:, [0, 2, 4, 6]]
+            y = xy[:, [1, 3, 5, 7]]
+            print(f"x坐标: {x[:2]}, y坐标: {y[:2]}")
+
+            xy = np.concatenate((x.min(1), y.min(1), x.max(1), y.max(1))).reshape(4, n).T
+            print(f"新边界框坐标: {xy[:2]}")
+
+            # 应用边界框尺寸过滤
+            classes = boxes[:, 0]
+            boxes = np.concatenate((classes.reshape(-1, 1), xy), axis=1)
+            print(f"合并后的boxes: {boxes[:2]}")
+
+            boxes[:, [1, 3]] = boxes[:, [1, 3]].clip(0, width)
+            boxes[:, [2, 4]] = boxes[:, [2, 4]].clip(0, height)
+            print(f"clip后的boxes: {boxes[:2]}")
+
+            w = boxes[:, 3] - boxes[:, 1]
+            h = boxes[:, 4] - boxes[:, 2]
+            area = w * h
+            ar = np.maximum(w / (h + 1e-16), h / (w + 1e-16))
+
+            print(f"w: {w}, h: {h}, area: {area}, ar: {ar}")
+            i = (w > 2) & (h > 2) & (area / (area0 + 1e-16) > 0.05) & (ar < 20)
+            boxes = boxes[i]
+        print(boxes)
+
 def main():
 
     # TODO: 先检查一下数据集是否已经下载过了，如果下载过了，就不用再执行下载函数了
@@ -278,9 +423,10 @@ def main():
     # 可视化一下加载的数据集
     with tqdm(total=len(trainDataLoader)+len(valDataLoader), desc="数据集可视化中") as pbarDataloader:
 
-        for batchIndex, (idx) in enumerate(trainDataLoader):
+        for batchIndex, (augmentationData, targets) in enumerate(trainDataLoader):
             for i in range(config_paramters.BATCH_SIZE):
                 print('===============>>>')
+                print(targets.shape)
             pbarDataloader.update(1)
 
 

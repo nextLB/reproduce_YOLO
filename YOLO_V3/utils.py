@@ -109,6 +109,12 @@ def visualize_mosaic(mosaic_image, mosaic_boxes, class_names=None, figsize=(12, 
     # 创建图形
     fig, ax = plt.subplots(1, 1, figsize=figsize)
 
+    # 检查是否为PIL Image对象，如果是则转换为numpy数组
+    if isinstance(mosaic_image, Image.Image):
+        mosaic_image = np.array(mosaic_image)
+    else:
+        mosaic_image = mosaic_image
+
     # 显示图像
     ax.imshow(mosaic_image)
 
