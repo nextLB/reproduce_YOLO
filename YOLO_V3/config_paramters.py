@@ -5,10 +5,12 @@
 # 数据集参数配置
 IMAGE_SIZE = 640
 GRID_SIZE = 32
+RATIO = 0.3  # 验证集与训练集的划分比例
 
 
 # 训练参数配置
 BATCH_SIZE = 4
+NUM_WORKERS = 4
 
 # LEARNING_RATE_INIT = 0.01  # initial learning rate (SGD=1E-2, Adam=1E-3)
 # LEARNING_RATE_FINAL = 0.01  # final OneCycleLR learning rate (LEARNING_RATE_INIT * LEARNING_RATE_FINAL)
