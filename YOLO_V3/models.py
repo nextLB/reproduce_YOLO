@@ -35,7 +35,7 @@ class ResidualBlock(nn.Module):
     def forward(self, x):
         residual = x
         out = self.conv1(x)
-        out = self.conv2(x)
+        out = self.conv2(out)
         out += residual
         return out
 
@@ -109,7 +109,7 @@ class Darknet53(nn.Module):
 
 # 检测头的实现
 class YOLOLayer(nn.Module):
-    def __init__(self, anchors, numClasses, imagesDim):
+    def __init__(self, inChannels, anchors, numClasses, imagesDim):
         super(YOLOLayer, self).__init__()
         self.anchors = anchors
         self.numAnchors = len(anchors)
@@ -118,7 +118,7 @@ class YOLOLayer(nn.Module):
         self.gridSize = 0
 
         # 预测层
-        self.conv = DarknetConv(512, self.numAnchors * (5 + numClasses), 1, 1, 0)
+        self.conv = DarknetConv(inChannels, self.numAnchors * (5 + numClasses), 1, 1, 0)
 
     def forward(self, x):
         batchSize = x.size(0)
@@ -151,9 +151,9 @@ class YOLOv3(nn.Module):
 
         # YOLO检测头的定义
         self.yoloLayers = nn.ModuleList([
-            YOLOLayer(config_paramters.ANCHORS[0], config_paramters.NUM_CLASSES, config_paramters.IMAGE_SIZE),  # 大特征图
-            YOLOLayer(config_paramters.ANCHORS[1], config_paramters.NUM_CLASSES, config_paramters.IMAGE_SIZE),  # 中特征图
-            YOLOLayer(config_paramters.ANCHORS[2], config_paramters.NUM_CLASSES, config_paramters.IMAGE_SIZE),  # 小特征图
+            YOLOLayer(1024, config_paramters.ANCHORS[0], config_paramters.NUM_CLASSES, config_paramters.IMAGE_SIZE),  # 大特征图
+            YOLOLayer(256, config_paramters.ANCHORS[1], config_paramters.NUM_CLASSES, config_paramters.IMAGE_SIZE),  # 中特征图
+            YOLOLayer(128, config_paramters.ANCHORS[2], config_paramters.NUM_CLASSES, config_paramters.IMAGE_SIZE),  # 小特征图
         ])
 
         # 上采样和特征融合
@@ -161,18 +161,18 @@ class YOLOv3(nn.Module):
             DarknetConv(1024, 256, 1, 1, 0),
             nn.Upsample(scale_factor=2, mode='nearest')
         )
-        self.conv1 = DarknetConv(512, 256, 1, 1, 0)
+        self.conv1 = DarknetConv(768, 256, 1, 1, 0)  # 512 + 256 = 768
 
         self.upsample2 = nn.Sequential(
-            DarknetConv(512, 128, 1, 1, 0),
+            DarknetConv(256, 128, 1, 1, 0),
             nn.Upsample(scale_factor=2, mode='nearest')
         )
-        self.conv2 = DarknetConv(256, 128, 1, 1, 0)
+        self.conv2 = DarknetConv(384, 128, 1, 1, 0)  # 256 + 128 = 384
 
 
     def forward(self, x):
         # 骨干网络
-        out1, out2, out3 = self.backbone(x)  # out1: 1024, out2: 512, out3: 256
+        out1, out2, out3 = self.backbone(x)  # out1: 1024, out2: 256, out3: 128
 
         # 大特征图检测
         yoloOut1 = self.yoloLayers[0](out1)
@@ -199,7 +199,8 @@ def main():
 
     model = YOLOv3().to(device)
 
-    print(model)
+    return model
+
 
 
 if __name__ == '__main__':

@@ -21,23 +21,27 @@ SHEAR = 10  # 对数据集进行仿射变换时的剪切范围设定
 
 # 模型构建时的参数配置
 ANCHORS = [
-            [(10,13), (16,30), (33,23)],   # P3/8
-            [(30,61), (62,45), (59,119)],  # P4/16
-            [(116,90), (156,198), (373,326)] # P5/32
+            [(10, 13), (16, 30), (33, 23)],   # P3/8
+            [(30, 61), (62, 45), (59, 119)],  # P4/16
+            [(116, 90), (156, 198), (373, 326)]  # P5/32
         ]
-ANCHOR_MASKS = [[0,1,2], [3,4,5], [6,7,8]]
 NUM_CLASSES = 80
 
 
 
 # 训练参数配置
+MAX_EPOCHS = 10
 BATCH_SIZE = 4
 NUM_WORKERS = 4
+LEARNING_RATE = 0.0001
+MOMENTUM = 0.937    # SGD momentum/Adam beta1
+WEIGHT_DECAY = 0.0005  # optimizer weight decay 5e-4
+
 
 # LEARNING_RATE_INIT = 0.01  # initial learning rate (SGD=1E-2, Adam=1E-3)
 # LEARNING_RATE_FINAL = 0.01  # final OneCycleLR learning rate (LEARNING_RATE_INIT * LEARNING_RATE_FINAL)
-# MOMENTUM = 0.937    # SGD momentum/Adam beta1
-# WEIGHT_DECAY = 0.0005  # optimizer weight decay 5e-4
+
+
 # WARMUP_EPOCHS = 3.0  # warmup epochs (fractions ok)
 # WARMUP_MOMENTUM = 0.8  # warmup initial momentum
 # WARMUP_BIAS_LEARNING_RATE = 0.1  # warmup initial bias lr

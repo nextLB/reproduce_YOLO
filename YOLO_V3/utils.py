@@ -10,6 +10,9 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from PIL import Image
 import numpy as np
+import config_path
+import shutil
+import config_paramters
 
 
 # 检查数据集
@@ -278,4 +281,53 @@ def load_class_names_from_yaml(yaml_path):
     except Exception as e:
         print(f"错误: 加载类别名称失败 - {e}")
         return []
+
+
+
+def clear_folder(folderPath: str):
+
+    # 遍历文件夹内的所有内容
+    for item in os.listdir(folderPath):
+        itemPath = os.path.join(folderPath, item)
+        try:
+            # 如果是文件或符号链接，直接删除
+            if os.path.isfile(itemPath) or os.path.islink(itemPath):
+                os.unlink(itemPath)
+                print(f'已删除文件夹: {itemPath}')
+            elif os.path.isdir(itemPath):
+                # 使用 shutil.rmtree 删除文件夹及其内容
+                shutil.rmtree(itemPath)
+                print(f"已删除文件夹： {itemPath}")
+
+        except Exception as e:
+            print(f"删除 {itemPath} 时出错： {e}")
+
+    print(f"文件夹 {folderPath} 内容已清空")
+
+
+
+
+# 创建模型训练过程中各文件的存储路径
+def create_all_path():
+    saveModelPath = os.path.join(config_path.MODEL_PATH, f'maxEpochs_{config_paramters.MAX_EPOCHS}_learningRate_{config_paramters.LEARNING_RATE}')
+    saveLogFilePath = os.path.join(config_path.LOG_FILE_PATH, f'maxEpochs_{config_paramters.MAX_EPOCHS}_learningRate_{config_paramters.LEARNING_RATE}')
+    saveFeatureMapsPath = os.path.join(config_path.FEATURE_MAPS_PATH, f'maxEpochs_{config_paramters.MAX_EPOCHS}_learningRate_{config_paramters.LEARNING_RATE}')
+    os.makedirs(saveModelPath, exist_ok=True)
+    clear_folder(saveModelPath)
+    os.makedirs(saveModelPath, exist_ok=True)
+
+    os.makedirs(saveLogFilePath, exist_ok=True)
+    clear_folder(saveLogFilePath)
+    os.makedirs(saveLogFilePath, exist_ok=True)
+
+    os.makedirs(saveFeatureMapsPath, exist_ok=True)
+    clear_folder(saveFeatureMapsPath)
+    os.makedirs(saveFeatureMapsPath, exist_ok=True)
+
+    return saveModelPath, saveLogFilePath, saveFeatureMapsPath
+
+
+
+
+
 
