@@ -48,14 +48,18 @@ class COCODataset(Dataset):
 
     def __getitem__(self, idx):
 
-        # 以mosaic数据增强的形式加载图像
-        image, targets = self.load_image_mosaic(idx)
 
-        # 以普通形式加载图像
-        self.load_image_ordinary(idx)
+        if random.random() < config_paramters.RANDOM_LOAD_IMAGE_RATIO:
+            # 以mosaic数据增强的形式加载图像
+            image, targets = self.load_image_mosaic(idx)
+        else:
+            # 以普通形式加载图像
+            image, targets = self.load_image_ordinary(idx)
 
 
         return image, targets
+
+
 
     # 以普通形式加载图像
     def load_image_ordinary(self, idx):
@@ -80,11 +84,37 @@ class COCODataset(Dataset):
         # 数据增强
         image, boxes = self.random_affine(image, boxes, config_paramters.DEGREES, config_paramters.TRANSLATE, config_paramters.SCALE, config_paramters.SHEAR)
 
-        # 可视化单个图像与类别
-        utils.visualize_single_image(
-            image, boxes,
-            class_names=self.classNames
-        )
+        # 调整图像大小
+        image, boxes = self.resize(image, boxes, originalSize)
+
+        # 颜色增强
+        image = self.random_color(image)
+
+
+        # # 可视化单个图像与类别
+        # utils.visualize_single_image(
+        #     image, boxes,
+        #     class_names=self.classNames
+        # )
+
+
+
+        # 将处理过的数据转换为tensor
+        imageTensor = transforms.ToTensor()(image)
+
+        # 填充
+        paddedImage = torch.zeros(3, self.imageSize, self.imageSize)
+        _, h, w = imageTensor.shape
+        paddedImage[:, :h, :w] = imageTensor
+
+        targets = torch.zeros((config_paramters.TARGETS_SIZE, 6))
+        if len(boxes) > 0:
+            targets[:len(boxes), 1:] = torch.from_numpy(boxes)
+            targets[:, 0] = idx
+
+        return paddedImage, targets
+
+
 
     # 以mosaic数据增强的形式加载图像
     def load_image_mosaic(self, idx):
@@ -389,6 +419,32 @@ class COCODataset(Dataset):
         return Image.fromarray(imw), boxes
 
 
+    # 随机颜色的调整
+    def random_color(self, image):
+        if random.random() < config_paramters.RANDOM_COLOR_RATIO:
+            return image
+
+        image = np.array(image)
+
+        # HSV颜色空间增强
+        hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
+        h, s, v = cv2.split(hsv)
+
+        # 调整饱和度
+        sFactor = random.uniform(0.5, 1.5)
+        s = np.clip(s * sFactor, 0, 255).astype(np.uint8)
+
+        # 调整明度
+        vFactor = random.uniform(0.5, 1.5)
+        v = np.clip(v * vFactor, 0, 255).astype(np.uint8)
+
+        hsv = cv2.merge([h, s, v])
+        image = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
+
+        return Image.fromarray(image)
+
+
+
 def main():
 
     # TODO: 先检查一下数据集是否已经下载过了，如果下载过了，就不用再执行下载函数了
@@ -440,29 +496,24 @@ def main():
     )
 
 
-    os.makedirs('visualization', exist_ok=True)
-    # 可视化一下加载的数据集
-    with tqdm(total=len(trainDataLoader)+len(valDataLoader), desc="数据集可视化中") as pbarDataloader:
-
-        for batchIndex, (augmentationData, targets) in enumerate(trainDataLoader):
-            for i in range(config_paramters.BATCH_SIZE):
-                print('===============>>>')
-                print(targets.shape)
-            pbarDataloader.update(1)
-
-
-        # # 训练集
-        # for batchIndex, (originalData, augmentationData, targets) in enumerate(trainDataLoader):
-        #     for i in range(config_paramters.BATCH_SIZE):
-        #         print(targets.shape)
-        #     pbarDataloader.update(1)
-
+    # os.makedirs('visualization', exist_ok=True)
+    # # 可视化一下加载的数据集
+    # with tqdm(total=len(trainDataLoader)+len(valDataLoader), desc="数据集可视化中") as pbarDataloader:
+    #
+    #     # 训练集
+    #     for batchIndex, (augmentationData, targets) in enumerate(trainDataLoader):
+    #         for i in range(config_paramters.BATCH_SIZE):
+    #             print(targets.shape)
+    #         pbarDataloader.update(1)
+    #
     #     # 验证集
-    #     for batchIndex, (originalData, augmentationData, targets) in enumerate(valDataLoader):
-    #         for i in range(config_parameter.BATCH_SIZE):
+    #     for batchIndex, (augmentationData, targets) in enumerate(valDataLoader):
+    #         for i in range(config_paramters.BATCH_SIZE):
     #             print(targets.shape)
     #         pbarDataloader.update(1)
 
+
+    return trainDataLoader, valDataLoader
 
 
 if __name__ == '__main__':
