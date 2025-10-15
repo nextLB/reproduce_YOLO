@@ -13,7 +13,7 @@ class YOLOLoss(nn.Module):
         self.mseLoss = nn.MSELoss(reduction='sum')
         self.bceLoss = nn.BCEWithLogitsLoss(reduction='sum')
         self.objScale = 1
-        self.noobjScale = 100
+        self.noobjScale = 0.5
         self.classScale = 1
         self.coordScale = 5
 
@@ -82,6 +82,13 @@ class YOLOLoss(nn.Module):
         noobjMask = torch.ones(batchSize, numAnchors, gridSize, gridSize,
                                device=prediction.device, dtype=torch.bool)
 
+        # 将anchor缩放到当前特征图尺度
+        scaled_anchors = []
+        for anchor in anchors:
+            anchor_w = anchor[0] / (config_paramters.IMAGE_SIZE / gridSize)
+            anchor_h = anchor[1] / (config_paramters.IMAGE_SIZE / gridSize)
+            scaled_anchors.append((anchor_w, anchor_h))
+
         # 为每个目标分配锚框
         for batchIdx in range(batchSize):
 
@@ -113,22 +120,25 @@ class YOLOLoss(nn.Module):
                 bestIou = 0
                 bestAnchor = 0
 
-                for anchorIdx, anchor in enumerate(anchors):
+                for anchorIdx, anchor in enumerate(scaled_anchors):
                     anchorW, anchorH = anchor
 
-                    # 将锚框尺寸调整到当前网格尺度
-                    anchorW /= config_paramters.IMAGE_SIZE / gridSize
-                    anchorH /= config_paramters.IMAGE_SIZE / gridSize
-
-
                     # 计算IoU
-                    inter = min(width, anchorW) * min(height, anchorH)
+
+                    # 计算交集
+                    inter_width = min(width, anchorW)
+                    inter_height = min(height, anchorH)
+                    inter = inter_width * inter_height
+
+                    # 计算并集
                     union = width * height + anchorW * anchorH - inter
-                    iou = inter / union
+                    iou = inter / (union + 1e-16)
 
                     if iou > bestIou:
                         bestIou = iou
                         bestAnchor = anchorIdx
+
+
 
                 # 计算网格位置
                 gridX = int(xCenter)
@@ -140,8 +150,8 @@ class YOLOLoss(nn.Module):
                     # 设置目标值
                     targetTensor[batchIdx, bestAnchor, gridY, gridX, 0] = xCenter - gridX
                     targetTensor[batchIdx, bestAnchor, gridY, gridX, 1] = yCenter - gridY
-                    targetTensor[batchIdx, bestAnchor, gridY, gridX, 2] = torch.log(width / anchors[bestAnchor][0] + 1e-16)
-                    targetTensor[batchIdx, bestAnchor, gridY, gridX, 3] = torch.log(height / anchors[bestAnchor][1] + 1e-16)
+                    targetTensor[batchIdx, bestAnchor, gridY, gridX, 2] = torch.log(width / scaled_anchors[bestAnchor][0] + 1e-16)
+                    targetTensor[batchIdx, bestAnchor, gridY, gridX, 3] = torch.log(height / scaled_anchors[bestAnchor][1] + 1e-16)
                     targetTensor[batchIdx, bestAnchor, gridY, gridX, 4] = 1     # 对象置信度
                     targetTensor[batchIdx, bestAnchor, gridY, gridX, 5 + classId] = 1       # 类别概率
 

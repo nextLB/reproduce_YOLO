@@ -51,12 +51,43 @@ def main():
             # 计算损失
             v3Loss = criterion(predictions, targets)
 
-            print(v3Loss)
+            # 反向传播
+            optimizer.zero_grad()
+            v3Loss.backward()
+            optimizer.step()
 
+            trainTotalLoss += v3Loss.item()
 
             # 更新进度条
             trainLoop.set_postfix(loss=v3Loss.item())
 
+        trainAvgLoss = trainTotalLoss / len(trainDataLoader)
+        print(f'本轮训练集的平均损失为: {trainAvgLoss}')
+
+        # 更新学习率
+        scheduler.step()
+
+
+        # model.eval()
+        # valTotalLoss = 0
+        # valLoop = tqdm(valDataLoader, desc="valing")
+        # for batchIdx, (images, targets) in enumerate(valLoop):
+        #     images = images.to(device)
+        #     targets = targets.to(device)
+        #
+        #     # 前向传播
+        #     predictions = model(images)
+        #
+        #     # 计算损失
+        #     v3Loss = criterion(predictions, targets)
+        #
+        #     valTotalLoss += v3Loss.item()
+        #
+        #     # 更新进度条
+        #     valLoop.set_postfix(loss=v3Loss.item())
+        #
+        # valAvgLoss = valTotalLoss / len(valDataLoader)
+        # print(f'本轮验证集的平均损失为: {valAvgLoss}')
 
 
 

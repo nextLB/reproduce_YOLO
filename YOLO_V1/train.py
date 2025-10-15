@@ -115,7 +115,7 @@ def main():
         # Step and graph scheduler once an epoch
         # writer.add_scalar('Learning Rate', scheduler.get_last_lr()[0], epoch)
         # scheduler.step()
-
+        print(trainLoss)
         train_losses = np.append(train_losses, [[epoch], [trainLoss]], axis=1)
         writer.add_scalar('Loss/train', trainLoss, epoch)
 
@@ -133,6 +133,8 @@ def main():
 
                     test_loss += loss.item() / len(valDataLoader)
                     del data, labels
+
+            print(test_loss)
             test_losses = np.append(test_losses, [[epoch], [test_loss]], axis=1)
             writer.add_scalar('Loss/test', test_loss, epoch)
             save_metrics()
