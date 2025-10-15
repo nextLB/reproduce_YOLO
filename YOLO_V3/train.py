@@ -47,7 +47,9 @@ def main():
             # 前向传播
             predictions = model(images)
 
-            print(predictions[0].shape, predictions[1].shape, predictions[2].shape, targets.shape)
+
+            # 计算损失
+            criterion(predictions, targets)
 
 
             # 更新进度条

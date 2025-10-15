@@ -107,10 +107,11 @@ class COCODataset(Dataset):
         _, h, w = imageTensor.shape
         paddedImage[:, :h, :w] = imageTensor
 
-        targets = torch.zeros((config_paramters.TARGETS_SIZE, 6))
+        targets = torch.zeros((config_paramters.TARGETS_SIZE, 5))
         if len(boxes) > 0:
-            targets[:len(boxes), 1:] = torch.from_numpy(boxes)
-            targets[:, 0] = idx
+            targets[:len(boxes), :] = torch.from_numpy(boxes)
+            # 设置无效标签
+            targets[len(boxes):, 0] = -1
 
         return paddedImage, targets
 
@@ -215,10 +216,11 @@ class COCODataset(Dataset):
         _, h, w = imageTensor.shape
         paddedImage[:, :h, :w] = imageTensor
 
-        targets = torch.zeros((config_paramters.TARGETS_SIZE, 6))
+        targets = torch.zeros((config_paramters.TARGETS_SIZE, 5))
         if len(mosaicBoxes) > 0:
-            targets[:len(mosaicBoxes), 1:] = torch.from_numpy(mosaicBoxes)
-            targets[:, 0] = idx
+            targets[:len(mosaicBoxes), :] = torch.from_numpy(mosaicBoxes)
+            # 设置无效标签
+            targets[len(mosaicBoxes):, 0] = -1
 
         return paddedImage, targets
 
