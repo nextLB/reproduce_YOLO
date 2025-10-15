@@ -49,11 +49,13 @@ def main():
 
 
             # 计算损失
-            criterion(predictions, targets)
+            v3Loss = criterion(predictions, targets)
+
+            print(v3Loss)
 
 
             # 更新进度条
-            trainLoop.set_postfix()
+            trainLoop.set_postfix(loss=v3Loss.item())
 
 
 

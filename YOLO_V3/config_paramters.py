@@ -4,7 +4,7 @@
 
 # 数据集参数配置
 IMAGE_SIZE = 640
-GRID_SIZE = 32
+GRID_SIZE = [32, 16, 8]  # 对应不同尺度的网格大小
 RATIO = 0.3  # 验证集与训练集的划分比例
 RANDOM_CROP_RATIO = 0.5  # 构建数据集时对于数据进行随机裁剪的比例
 RANDOM_AFFINE_RATIO = 0.5  # 构建数据集时对于数据进行仿射变换的比例
