@@ -20,9 +20,8 @@ AFFINE_FLIP = 0.5        # 进行仿射变换时的水平翻转的概率
 AFFINE_BORDER = (128, 128, 128)      # 进行仿射变换时的边界填充值
 MEAN = [0.485, 0.456, 0.406]        # 图像数据进行归一化时的均值
 STD = [0.229, 0.224, 0.225]         # 图像数据进行归一化时的方差
-GRID_SIZE = 10       # Divide each image into a SxS grid
-BOUNDING = 5       # Number of bounding boxes to predict
 CLASS_NUMBER = 20      # Number of classes in the dataset
+TARGETS_SIZE = 100
 
 
 

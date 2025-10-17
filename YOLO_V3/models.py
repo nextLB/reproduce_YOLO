@@ -64,23 +64,23 @@ class Darknet53(nn.Module):
         self.conv2 = DarknetConv(32, 64, 3, 2, 1)
 
         # 残差块组1
-        self.residual1 = self._make_layer(64, 32, 1)
+        self.residual1 = self._make_layer(64, 64, 1)
         self.conv3 = DarknetConv(64, 128, 3, 2, 1)
 
         # 残差块组2
-        self.residual2 = self._make_layer(128, 64, 2)
+        self.residual2 = self._make_layer(128, 128, 2)
         self.conv4 = DarknetConv(128, 256, 3, 2, 1)
 
         # 残差块组3
-        self.residual3 = self._make_layer(256, 128, 8)
+        self.residual3 = self._make_layer(256, 256, 8)
         self.conv5 = DarknetConv(256, 512, 3, 2, 1)
 
         # 残差块组4
-        self.residual4 = self._make_layer(512, 256, 8)
+        self.residual4 = self._make_layer(512, 512, 8)
         self.conv6 = DarknetConv(512, 1024, 3, 2, 1)
 
         # 残差块组5
-        self.residual5 = self._make_layer(1024, 512, 4)
+        self.residual5 = self._make_layer(1024, 1024, 4)
 
     def _make_layer(self, inChannels, outChannels, blocks):
         layers = []

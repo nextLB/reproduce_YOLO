@@ -47,7 +47,7 @@ def YOLOV3_VOC2007_TRAIN_MAIN():
             # 前向传播
             predictions = model(images)
             for i in range(len(predictions)):
-                print(predictions[i].shape)
+                print(predictions[i].shape, targets.shape)
 
 
 

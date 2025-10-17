@@ -88,20 +88,16 @@ class VOC2007Dataset(Dataset):
         augmentedImage = self.normalize_image(augmentedImage, config_parameter.MEAN, config_parameter.STD)
 
         # 将图像转换为tensor张量
+        toTensorTansform = transforms.Compose([transforms.ToTensor()])
+        augmentedImage = toTensorTansform(augmentedImage)
+        augmentedImage = augmentedImage.float()
 
 
-        # 初始化跟踪字典和最终返回的ground truth张量
-        trackBoxes = {}     # 跟踪每个网格单元格已分配的边界框数量
-        classNames = {}      # 跟踪每个网格单元格分配的类别
-        depth = 5 * config_parameter.BOUNDING + config_parameter.CLASS_NUMBER       # 张量深度：B个边界框×5个参数 + C个类别
-        groundTruth = torch.zeros((config_parameter.GRID_SIZE, config_parameter.GRID_SIZE, depth))
+        # 初始化最终返回的ground truth张量
+        depth = 5 + config_parameter.CLASS_NUMBER       # 张量深度：5个参数 + C个类别
+        groudTruth = torch.zeros(config_parameter.TARGETS_SIZE, depth)
 
-        # 计算网格尺寸
-        gridSizeX = config_parameter.IMAGE_SIZE[0] / config_parameter.GRID_SIZE     # 每个网格的宽度
-        gridSizeY = config_parameter.IMAGE_SIZE[1] / config_parameter.GRID_SIZE     # 每个网格的高度
-
-
-        # 注意：在groundTruth中的信息，类别信息位于前面，而坐标信息等是位于onehot向量的后面的
+        index = 0
         # 处理每个边界框，构建ground truth张量
         for name, coords in augmentedBoundingBoxes:
             # 获取类别索引 - 添加错误处理
@@ -116,50 +112,27 @@ class VOC2007Dataset(Dataset):
             midX = (xMax + xMin) / 2
             midY = (yMax + yMin) / 2
 
-            # 确定中心点所在的网格单元格
-            col = int(midX // gridSizeX)
-            row = int(midY // gridSizeY)
+            # 计算边界框的宽和高
+            width = xMax - xMin
+            height = yMax - yMin
+
+            # 创建类别one-hot编码向量
+            oneHot = torch.zeros(config_parameter.CLASS_NUMBER)
+            oneHot[classIndex] = 1.0
+
+            # 将上述计算得到的所有信息写入到groundTruth张量中
+            groudTruth[index, 0] = midX     # x的中心坐标
+            groudTruth[index, 1] = midY     # y的中心坐标
+            groudTruth[index, 2] = width    # 宽度
+            groudTruth[index, 3] = height   # 高度
+            groudTruth[index, 4] = 1.0      # 置信度
+            groudTruth[index, 5:] = oneHot  # 类别的onehot向量
+
+            index += 1
 
 
-            # 确保网格缩影在有效范围内
-            if 0 <= col < config_parameter.GRID_SIZE and 0 <= row < config_parameter.GRID_SIZE:
-                cell = (row, col)
 
-                # 如果该网格单元格未被分配类别，或者当前类别与已分配类别相同
-                if cell not in classNames or name == classNames[cell]:
-                    # 创建类别one-hot编码向量
-                    oneHot = torch.zeros(config_parameter.CLASS_NUMBER)
-                    oneHot[classIndex] = 1.0
-
-                    # 将类别信息写入ground truth张量的前C个通道
-                    groundTruth[row, col, :config_parameter.CLASS_NUMBER] = oneHot
-                    classNames[cell] = name
-
-                    # 获取当前网格单元格已分配的边界框数量
-                    bboxIndex = trackBoxes.get(cell, 0)
-
-                    # 如果还有可用的边界框槽位
-                    if bboxIndex < config_parameter.BOUNDING:
-                        # 计算边界框相对于网格单元格的归一化坐标
-                        bboxTruth = (
-                            (midX - col * gridSizeX) / gridSizeX,  # X坐标相对于网格的偏移
-                            (midY - row * gridSizeY) / gridSizeY,  # Y坐标相对于网格的偏移
-                            (xMax - xMin) / config_parameter.IMAGE_SIZE[0],  # 宽度相对于图像的比率
-                            (yMax - yMin) / config_parameter.IMAGE_SIZE[1],  # 高度相对于图像的比率
-                            1.0  # 置信度（有目标）
-                        )
-
-                        # 计算当前边界框在张量中的起始位置
-                        bbox_start = config_parameter.CLASS_NUMBER + 5 * bboxIndex
-
-                        # 将当前边界框信息写入ground truth张量
-                        groundTruth[row, col, bbox_start:bbox_start + 5] = torch.tensor(bboxTruth)
-
-                        # 更新该网格单元格的边界框计数
-                        trackBoxes[cell] = bboxIndex + 1
-
-
-        return augmentedImage, groundTruth
+        return augmentedImage, groudTruth
 
 
 
@@ -635,7 +608,8 @@ def VOC2007_MAIN():
     # os.makedirs('visualization', exist_ok=True)
     # # 可视化一下加载的数据集
     # with tqdm(total=len(trainDataLoader)+len(valDataLoader), desc="数据集可视化中") as pbarDataloader:
-    #
+    #     for batchIndex, (augmentedImage, targets) in enumerate(trainDataLoader):
+    #             pbarDataloader.update(1)
     #     # 训练集
     #     for batchIndex, (augmentedImage, targets) in enumerate(trainDataLoader):
     #         for i in range(config_parameter.BATCH_SIZE):
