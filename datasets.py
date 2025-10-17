@@ -131,7 +131,6 @@ class VOC2007Dataset(Dataset):
             index += 1
 
 
-
         return augmentedImage, groudTruth
 
 

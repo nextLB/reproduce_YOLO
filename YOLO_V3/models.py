@@ -53,7 +53,6 @@ class ResidualBlock(nn.Module):
 
 
 
-
 class Darknet53(nn.Module):
     def __init__(self):
         super(Darknet53, self).__init__()
