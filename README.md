@@ -57,6 +57,8 @@
     tensorboard配置
 
         pip3 install -i https://pypi.tuna.tsinghua.edu.cn/simple tensorboard
+    
+
 
 
 ## V1.0 版本
