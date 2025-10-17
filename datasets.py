@@ -24,6 +24,7 @@ import random
 import math
 import cv2
 import numpy as np
+import torchvision.transforms as transforms
 
 
 
@@ -85,6 +86,8 @@ class VOC2007Dataset(Dataset):
 
         # 对增强后的图像数据做最终的归一化处理
         augmentedImage = self.normalize_image(augmentedImage, config_parameter.MEAN, config_parameter.STD)
+
+        # 将图像转换为tensor张量
 
 
         # 初始化跟踪字典和最终返回的ground truth张量
@@ -596,7 +599,7 @@ class VOC2007Dataset(Dataset):
 
 
 
-def main():
+def VOC2007_MAIN():
     fullDatasets = VOC2007Dataset()
 
     # 划分索引，整理出训练集与验证集
@@ -650,7 +653,7 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    VOC2007_MAIN()
 
 
 

@@ -26,4 +26,11 @@ CLASS_NUMBER = 20      # Number of classes in the dataset
 
 
 
+# 模型训练时的参数配置
+MAX_EPOCHS = 100
+LEARNING_RATE = 0.0001
+MOMENTUM = 0.937
+WEIGHT_DECAY = 0.0005
+
+
 
