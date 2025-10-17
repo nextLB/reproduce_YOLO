@@ -130,14 +130,14 @@ class VOC2007Dataset(Dataset):
         scale = random.uniform(minScale, maxScale)
 
         # 计算裁剪区域的尺寸
-        crop_width = int(width * scale)
-        crop_height = int(height * scale)
+        cropWidth = int(width * scale)
+        cropHeight = int(height * scale)
 
         # 随机确定裁剪区域的起始位置
-        left = random.randint(0, width - crop_width)
-        top = random.randint(0, height - crop_height)
-        right = left + crop_width
-        bottom = top + crop_height
+        left = random.randint(0, width - cropWidth)
+        top = random.randint(0, height - cropHeight)
+        right = left + cropWidth
+        bottom = top + cropHeight
 
         # 裁剪图像
         cropped_image = image.crop((left, top, right, bottom))
@@ -162,36 +162,37 @@ class VOC2007Dataset(Dataset):
                 new_ymax = inter_ymax - top
 
                 # 确保新的边界框坐标在有效范围内
-                new_xmin = max(0, min(new_xmin, crop_width))
-                new_ymin = max(0, min(new_ymin, crop_height))
-                new_xmax = max(0, min(new_xmax, crop_width))
-                new_ymax = max(0, min(new_ymax, crop_height))
+                new_xmin = max(0, min(new_xmin, cropWidth))
+                new_ymin = max(0, min(new_ymin, cropHeight))
+                new_xmax = max(0, min(new_xmax, cropWidth))
+                new_ymax = max(0, min(new_ymax, cropHeight))
 
                 cropped_bboxes.append((class_name, (new_xmin, new_ymin, new_xmax, new_ymax)))
 
         return cropped_image, cropped_bboxes
 
 
-    # 数据增强：随机仿射变换
-    def random_affine_transform(self, image, boundingBoxes, rotationRange, translationRange, scaleRange, shearRange,flipProb, transformProb, borderValue):
 
+    # 数据增强：随机仿射变换
+    def random_affine_transform(self, image, boundingBoxes, rotationRange, translationRange, scaleRange, shearRange,
+                              flipProb, transformProb, borderValue):
         """
         使用OpenCV进行更精确的仿射变换
 
         参数:
         image: PIL Image对象
-        bounding_boxes: 边界框列表
-        rotation_range: 旋转角度范围 (度)
-        translation_range: 平移范围 (相对于图像尺寸的比例)
-        scale_range: 缩放范围
-        shear_range: 剪切角度范围 (度)
-        flip_prob: 水平翻转的概率
-        transform_prob: 执行变换的概率
-        border_value: 边界填充值
+        boundingBoxes: 边界框列表
+        rotationRange: 旋转角度范围 (度)
+        translationRange: 平移范围 (相对于图像尺寸的比例)
+        scaleRange: 缩放范围
+        shearRange: 剪切角度范围 (度)
+        flipProb: 水平翻转的概率
+        transformProb: 执行变换的概率
+        borderValue: 边界填充值
 
         返回:
-        transformed_image: 变换后的PIL Image
-        transformed_bboxes: 变换后对应的边界框列表
+        transformedImage: 变换后的PIL Image
+        transformedBboxes: 变换后对应的边界框列表
         """
         # 以一定概率决定是否执行变换
         if random.random() > transformProb:
@@ -215,7 +216,7 @@ class VOC2007Dataset(Dataset):
 
         # 水平翻转
         if flip:
-            cv_image = cv2.flip(cvImage, 1)
+            cvImage = cv2.flip(cvImage, 1)
 
         # 计算变换矩阵
         center = (width / 2, height / 2)
@@ -223,29 +224,46 @@ class VOC2007Dataset(Dataset):
         # 构建旋转矩阵
         rotationMatrix = cv2.getRotationMatrix2D(center, rotation, scale)
 
-        # 添加剪切变换
-        shearMatrix = np.array([
+        # 修正矩阵乘法问题：使用齐次坐标
+        # 将旋转矩阵转换为3x3齐次坐标矩阵
+        rotationMatrixHomo = np.vstack([rotationMatrix, [0, 0, 1]])
+
+        # 构建剪切矩阵（3x3齐次坐标）
+        shearMatrixHomo = np.array([
             [1, math.tan(shearX), 0],
-            [math.tan(shearY), 1, 0]
+            [math.tan(shearY), 1, 0],
+            [0, 0, 1]
         ], dtype=np.float32)
 
-        # 组合变换矩阵
-        affineMatrix = np.dot(rotationMatrix, shearMatrix)
+        # 组合变换矩阵（先旋转缩放，再剪切）
+        affineMatrixHomo = np.dot(shearMatrixHomo, rotationMatrixHomo)
 
         # 添加平移
-        affineMatrix[0, 2] += translationX
-        affineMatrix[1, 2] += translationY
+        affineMatrixHomo[0, 2] += translationX
+        affineMatrixHomo[1, 2] += translationY
+
+        # 取前两行作为仿射变换矩阵
+        affineMatrix = affineMatrixHomo[:2, :]
 
         # 计算变换后的图像尺寸
-        cosTheta = abs(affineMatrix[0, 0])
-        sinTheta = abs(affineMatrix[0, 1])
+        # 计算原始图像的四个角点
+        corners = np.array([
+            [0, 0, 1],
+            [width, 0, 1],
+            [width, height, 1],
+            [0, height, 1]
+        ], dtype=np.float32).T
 
-        newWidth = int(height * sinTheta + width * cosTheta)
-        newHeight = int(height * cosTheta + width * sinTheta)
+        # 计算变换后的角点
+        transformedCorners = np.dot(affineMatrix, corners)
 
-        # 调整变换矩阵，使变换后的图像居中
-        affineMatrix[0, 2] += (newWidth - width) / 2
-        affineMatrix[1, 2] += (newHeight - height) / 2
+        # 计算新图像的尺寸
+        newWidth = int(np.max(transformedCorners[0]) - np.min(transformedCorners[0]))
+        newHeight = int(np.max(transformedCorners[1]) - np.min(transformedCorners[1]))
+
+        # 调整变换矩阵，使变换后的图像在正坐标区域
+        affineMatrix[0, 2] -= np.min(transformedCorners[0])
+        affineMatrix[1, 2] -= np.min(transformedCorners[1])
 
         # 应用仿射变换
         transformedCvImage = cv2.warpAffine(
@@ -268,21 +286,21 @@ class VOC2007Dataset(Dataset):
                 xmin, xmax = width - xmax, width - xmin
 
             # 边界框的四个角点
-            corners = np.array([
+            bboxCorners = np.array([
                 [xmin, ymin, 1],
                 [xmax, ymin, 1],
                 [xmax, ymax, 1],
                 [xmin, ymax, 1]
-            ], dtype=np.float32)
+            ], dtype=np.float32).T
 
             # 应用变换到角点
-            transformedCorners = np.dot(affineMatrix, corners.T).T
+            transformedBboxCorners = np.dot(affineMatrix, bboxCorners)
 
             # 计算变换后的边界框
-            newXmin = np.min(transformedCorners[:, 0])
-            newYmin = np.min(transformedCorners[:, 1])
-            newXmax = np.max(transformedCorners[:, 0])
-            newYmax = np.max(transformedCorners[:, 1])
+            newXmin = np.min(transformedBboxCorners[0])
+            newYmin = np.min(transformedBboxCorners[1])
+            newXmax = np.max(transformedBboxCorners[0])
+            newYmax = np.max(transformedBboxCorners[1])
 
             # 确保边界框坐标在有效范围内
             newXmin = max(0, min(newXmin, newWidth))
