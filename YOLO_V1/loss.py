@@ -4,6 +4,9 @@
     YOLOv1使用平方和误差(Sum Squared Error)作为损失函数
 """
 
+# 2025.10.17 (V1.0)            --- by next, 初步实现了YOLOv1的损失配置文件
+
+
 
 import torch
 from torch import nn as nn

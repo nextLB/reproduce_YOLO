@@ -2,6 +2,13 @@
 """
     YOLOV1 数据集的相关配置
 """
+# 2025.10.17 (V1.0)            --- by next, 初步实现了YOLOv1的数据集配置和加载文件
+
+
+
+
+
+
 import os.path
 import torch
 import config_path

@@ -1,6 +1,12 @@
 """
     本文件程序主要是在模型训练和评估等的过程中，提取模型架构的相关特征图的操作，以便于更好的理解模型的架构
 """
+
+# 2025.10.17 (V1.0)            --- by next, 初步实现了YOLOv1的特征图配置文件
+
+
+
+
 from typing import Callable, Any, List, Dict
 import torch.nn as nn
 import os

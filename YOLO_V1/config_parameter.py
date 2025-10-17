@@ -4,6 +4,12 @@
     YOLOV1复现项目的参数配置
 """
 
+# 2025.10.17 (V1.0)            --- by next, 初步实现了YOLOv1的参数配置文件
+
+
+
+
+
 # 数据集中的图像参数配置
 IMAGE_SIZE = (448, 448)
 S = 7       # Divide each image into a SxS grid

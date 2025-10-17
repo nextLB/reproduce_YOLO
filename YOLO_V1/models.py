@@ -1,6 +1,12 @@
 """
     YOLO模型的架构程序文件
 """
+
+# 2025.10.17 (V1.0)            --- by next, 初步实现了YOLOv1的模型架构文件
+
+
+
+
 import torch
 import torch.nn as nn
 from torchvision.models import resnet50, ResNet50_Weights

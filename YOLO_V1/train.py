@@ -2,6 +2,11 @@
     YOLOV1的训练程序
 """
 
+
+# 2025.10.17 (V1.0)            --- by next, 初步实现了YOLOv1的训练主程序文件
+
+
+
 import torch
 from torch.utils.tensorboard import SummaryWriter
 import os
