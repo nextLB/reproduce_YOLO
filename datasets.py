@@ -20,6 +20,7 @@ from torch.utils.data import DataLoader
 import os
 from PIL import Image
 import xml.etree.ElementTree as ET
+import random
 
 
 
@@ -50,14 +51,23 @@ class VOC2007Dataset(Dataset):
         # 加载真实目标框数据
         boundingBoxes = self.load_real_bboxes(labelPath)
 
+        # 数据增强：随机裁剪
+        croppedImage, croppedBoundingBoxes = self.random_crop_with_bboxes(imageData,
+                                                                          boundingBoxes,
+                                                                          config_parameter.RANDOM_CROP_RATIO,
+                                                                          config_parameter.RANDOM_CROP_SCOPE[0],
+                                                                          config_parameter.RANDOM_CROP_SCOPE[1])
+
+
+
+
         # # 可视化数据
-        # next_utils.visualize_image_with_bboxes(imageData, boundingBoxes)
-
-
-
+        # next_utils.visualize_image_with_bboxes(croppedImage, croppedBoundingBoxes)
 
 
         return originalWidth, originalHeight
+
+
 
     # 加载真实目标框的坐标函数
     def load_real_bboxes(self, labelPath):
@@ -79,8 +89,77 @@ class VOC2007Dataset(Dataset):
 
 
 
+    # 数据增强：随机裁剪
+    def random_crop_with_bboxes(self, image, boundingBoxes, cropProb, minScale, maxScale):
+        """
+        对图像和对应的边界框进行随机裁剪
+
+        参数:
+        image: PIL Image对象
+        bounding_boxes: 边界框列表，格式为 [(name, (xmin, ymin, xmax, ymax)), ...]
+        crop_prob: 执行裁剪的概率 (0-1)
+        min_scale: 最小裁剪比例 (0-1)
+        max_scale: 最大裁剪比例 (0-1)
+
+        返回:
+        cropped_image: 裁剪后的PIL Image
+        cropped_bboxes: 裁剪后对应的边界框列表
+        """
+        # 以一定概率决定是否执行裁剪
+        if random.random() > cropProb:
+            return image, boundingBoxes
+
+        # 获取图像尺寸
+        width, height = image.size
+
+        # 随机确定裁剪比例
+        scale = random.uniform(minScale, maxScale)
+
+        # 计算裁剪区域的尺寸
+        crop_width = int(width * scale)
+        crop_height = int(height * scale)
+
+        # 随机确定裁剪区域的起始位置
+        left = random.randint(0, width - crop_width)
+        top = random.randint(0, height - crop_height)
+        right = left + crop_width
+        bottom = top + crop_height
+
+        # 裁剪图像
+        cropped_image = image.crop((left, top, right, bottom))
+
+        # 调整边界框坐标
+        cropped_bboxes = []
+        for class_name, bbox in boundingBoxes:
+            xmin, ymin, xmax, ymax = bbox
+
+            # 计算边界框与裁剪区域的交集
+            inter_xmin = max(xmin, left)
+            inter_ymin = max(ymin, top)
+            inter_xmax = min(xmax, right)
+            inter_ymax = min(ymax, bottom)
+
+            # 检查边界框是否在裁剪区域内
+            if inter_xmin < inter_xmax and inter_ymin < inter_ymax:
+                # 计算新的边界框坐标（相对于裁剪后的图像）
+                new_xmin = inter_xmin - left
+                new_ymin = inter_ymin - top
+                new_xmax = inter_xmax - left
+                new_ymax = inter_ymax - top
+
+                # 确保新的边界框坐标在有效范围内
+                new_xmin = max(0, min(new_xmin, crop_width))
+                new_ymin = max(0, min(new_ymin, crop_height))
+                new_xmax = max(0, min(new_xmax, crop_width))
+                new_ymax = max(0, min(new_ymax, crop_height))
+
+                cropped_bboxes.append((class_name, (new_xmin, new_ymin, new_xmax, new_ymax)))
+
+        return cropped_image, cropped_bboxes
 
 
+    # 数据增强：随机仿射变换
+    
 
 
 
