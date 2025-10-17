@@ -52,7 +52,31 @@ def YOLOV3_VOC2007_TRAIN_MAIN():
             # 前向传播
             predictions = model(images)
 
+            # 计算损失
+            totalLoss, lossComponents = criterion(predictions, targets)
 
+            # 反向传播
+            optimizer.zero_grad()
+            totalLoss.backward()
+            optimizer.step()
+
+            trainTotalLoss += totalLoss.item()
+
+            # 更新进度条
+            trainLoop.set_postfix({
+                'Total Loss': f'{totalLoss.item():.4f}',
+                'Coord Loss': f'{lossComponents["coordLoss"]:.4f}',
+                'Obj Loss': f'{lossComponents["objLoss"]:.4f}',
+                'NoObj Loss': f'{lossComponents["noObjLoss"]:.4f}',
+                'Class Loss': f'{lossComponents["classLoss"]:.4f}'
+            })
+
+        # 更新学习率
+        scheduler.step()
+
+        # 打印epoch统计信息
+        avgLoss = trainTotalLoss / len(trainDataLoader)
+        print(f'Epoch {epoch + 1}/{config_parameter.MAX_EPOCHS}, Average Loss: {avgLoss:.4f}')
 
 
 
