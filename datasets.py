@@ -79,9 +79,21 @@ class VOC2007Dataset(Dataset):
         # 调整图像尺寸
         augmentedImage, augmentedBoundingBoxes = self.resize_image_and_bboxes(coloredImage, coloredBoundingBoxes, config_parameter.IMAGE_SIZE)
 
-        print(augmentedImage.size)
-        # 可视化数据
-        next_utils.visualize_image_with_bboxes(augmentedImage, augmentedBoundingBoxes)
+
+        # # 可视化数据
+        # next_utils.visualize_image_with_bboxes(augmentedImage, augmentedBoundingBoxes)
+
+        # 对增强后的图像数据做最终的归一化处理
+        augmentedImage = self.normalize_image(augmentedImage, config_parameter.MEAN, config_parameter.STD)
+
+
+        # 初始化跟踪字典和最终返回的ground truth张量
+        trackBoxes = {}     # 跟踪每个网格单元格已分配的边界框数量
+        classNames = {}      # 跟踪每个网格单元格分配的类别
+        depth = 5 * config_parameter.BOUNDING + config_parameter.CLASS_NUMBER       # 张量深度：B个边界框×5个参数 + C个类别
+        groundTruth = torch.zeros((config_parameter.GRID_SIZE, config_parameter.GRID_SIZE, depth))
+        print(groundTruth.shape)
+
 
 
         return originalWidth, originalHeight
@@ -350,64 +362,82 @@ class VOC2007Dataset(Dataset):
             # 随机亮度调整
             brightnessFactor = random.uniform(0.7, 1.3)
             hsv = cv2.cvtColor(cvImage, cv2.COLOR_RGB2HSV)
-            hsv[:, :, 2] = cv2.multiply(hsv[:, :, 2], brightnessFactor)
+            # 转换为float32避免溢出
+            hsv = hsv.astype(np.float32)
+            hsv[:, :, 2] = hsv[:, :, 2] * brightnessFactor
             hsv[:, :, 2] = np.clip(hsv[:, :, 2], 0, 255)
+            hsv = hsv.astype(np.uint8)
             augmentedCvImage = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
 
         elif augmentationType == 'contrast':
             # 随机对比度调整
             contrastFactor = random.uniform(0.7, 1.3)
-            augmentedCvImage = cv2.convertScaleAbs(cvImage, alpha=contrastFactor, beta=0)
+            # 转换为float32进行计算
+            floatImage = cvImage.astype(np.float32)
+            floatImage = floatImage * contrastFactor
+            floatImage = np.clip(floatImage, 0, 255)
+            augmentedCvImage = floatImage.astype(np.uint8)
 
         elif augmentationType == 'saturation':
             # 随机饱和度调整
             saturationFactor = random.uniform(0.7, 1.3)
             hsv = cv2.cvtColor(cvImage, cv2.COLOR_RGB2HSV)
-            hsv[:, :, 1] = cv2.multiply(hsv[:, :, 1], saturationFactor)
+            # 转换为float32避免溢出
+            hsv = hsv.astype(np.float32)
+            hsv[:, :, 1] = hsv[:, :, 1] * saturationFactor
             hsv[:, :, 1] = np.clip(hsv[:, :, 1], 0, 255)
+            hsv = hsv.astype(np.uint8)
             augmentedCvImage = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
 
         elif augmentationType == 'hue':
             # 随机色调调整
             hueShift = random.randint(-10, 10)
             hsv = cv2.cvtColor(cvImage, cv2.COLOR_RGB2HSV)
+            # 转换为float32避免溢出问题
+            hsv = hsv.astype(np.float32)
             hsv[:, :, 0] = (hsv[:, :, 0] + hueShift) % 180
+            hsv = hsv.astype(np.uint8)
             augmentedCvImage = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
 
         else:  # 'multiple'
             # 组合多种增强方式
-            augmentedCvImage = cvImage.copy()
+            augmentedCvImage = cvImage.copy().astype(np.float32)
 
             # 亮度调整
             if random.random() > 0.5:
                 brightnessFactor = random.uniform(0.8, 1.2)
-                hsv = cv2.cvtColor(augmentedCvImage, cv2.COLOR_RGB2HSV)
-                hsv[:, :, 2] = cv2.multiply(hsv[:, :, 2], brightnessFactor)
+                hsv = cv2.cvtColor(augmentedCvImage.astype(np.uint8), cv2.COLOR_RGB2HSV)
+                hsv = hsv.astype(np.float32)
+                hsv[:, :, 2] = hsv[:, :, 2] * brightnessFactor
                 hsv[:, :, 2] = np.clip(hsv[:, :, 2], 0, 255)
-                augmentedCvImage = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
+                augmentedCvImage = cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2RGB).astype(np.float32)
 
             # 对比度调整
             if random.random() > 0.5:
                 contrastFactor = random.uniform(0.8, 1.2)
-                augmentedCvImage = cv2.convertScaleAbs(augmentedCvImage, alpha=contrastFactor, beta=0)
+                augmentedCvImage = augmentedCvImage * contrastFactor
 
             # 饱和度调整
             if random.random() > 0.5:
                 saturationFactor = random.uniform(0.8, 1.2)
-                hsv = cv2.cvtColor(augmentedCvImage, cv2.COLOR_RGB2HSV)
-                hsv[:, :, 1] = cv2.multiply(hsv[:, :, 1], saturationFactor)
+                hsv = cv2.cvtColor(augmentedCvImage.astype(np.uint8), cv2.COLOR_RGB2HSV)
+                hsv = hsv.astype(np.float32)
+                hsv[:, :, 1] = hsv[:, :, 1] * saturationFactor
                 hsv[:, :, 1] = np.clip(hsv[:, :, 1], 0, 255)
-                augmentedCvImage = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
+                augmentedCvImage = cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2RGB).astype(np.float32)
+
+            # 确保像素值在有效范围内
+            augmentedCvImage = np.clip(augmentedCvImage, 0, 255).astype(np.uint8)
 
         # 确保像素值在有效范围内
-        augmentedCvImage = np.clip(augmentedCvImage, 0, 255).astype(np.uint8)
+        if augmentedCvImage.dtype != np.uint8:
+            augmentedCvImage = np.clip(augmentedCvImage, 0, 255).astype(np.uint8)
 
         # 转换回PIL图像格式
         augmentedImage = Image.fromarray(augmentedCvImage)
 
         # 边界框保持不变
         return augmentedImage, boundingBoxes
-
 
     def resize_image_and_bboxes(self, image, boundingBoxes, targetSize):
         """
@@ -455,6 +485,54 @@ class VOC2007Dataset(Dataset):
                 resizedBboxes.append((className, (newXmin, newYmin, newXmax, newYmax)))
 
         return resizedImage, resizedBboxes
+
+
+    # 对我的图像执行归一化方法
+    def normalize_image(self, image, mean, std):
+        """
+        使用均值和标准差对图像进行归一化（与PyTorch T.Normalize一致）
+
+        参数:
+        image: PIL Image对象或numpy数组 (H, W, C) 或 (C, H, W)
+        mean: 各通道的均值
+        std: 各通道的标准差
+
+        返回:
+        normalizedImage: 归一化后的图像，格式与输入一致
+        """
+        # 如果输入是PIL图像，转换为numpy数组
+        if isinstance(image, Image.Image):
+            imageArray = np.array(image).astype(np.float32)
+            isPil = True
+            # PIL图像通常是 (H, W, C)，需要转换为 (C, H, W) 进行归一化
+            if len(imageArray.shape) == 3:
+                imageArray = imageArray.transpose(2, 0, 1)
+        else:
+            imageArray = image.astype(np.float32)
+            isPil = False
+
+        # 确保imageArray是 (C, H, W) 格式
+        if len(imageArray.shape) == 3 and imageArray.shape[0] != 3:
+            # 如果是 (H, W, C) 格式，转换为 (C, H, W)
+            imageArray = imageArray.transpose(2, 0, 1)
+
+        # 将均值和标准差转换为numpy数组
+        meanArray = np.array(mean).reshape(-1, 1, 1)
+        stdArray = np.array(std).reshape(-1, 1, 1)
+
+        # 执行归一化：(image - mean) / std
+        normalizedArray = (imageArray - meanArray * 255) / (stdArray * 255)
+
+        # 根据输入类型返回相应格式
+        if isPil:
+            # 对于PIL图像，我们需要转换回 (H, W, C) 格式
+            normalizedArray = normalizedArray.transpose(1, 2, 0)
+            # 归一化后的值可能不在[0,255]范围内，所以不能直接转PIL
+            # 返回numpy数组，或者进行反归一化用于显示
+            return normalizedArray
+        else:
+            return normalizedArray
+
 
 
 
