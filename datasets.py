@@ -73,10 +73,15 @@ class VOC2007Dataset(Dataset):
                                                                         config_parameter.RANDOM_AFFINE_RATIO,
                                                                         config_parameter.AFFINE_BORDER)
 
+        # 数据增强：随机颜色变换
+        coloredImage, coloredBoundingBoxes = self.random_color_augmentation(affineImage, affineBoundingBoxes, config_parameter.RANDOM_COLOR_RATIO)
 
-        print(affineImage.size)
+        # 调整图像尺寸
+        augmentedImage, augmentedBoundingBoxes = self.resize_image_and_bboxes(coloredImage, coloredBoundingBoxes, config_parameter.IMAGE_SIZE)
+
+        print(augmentedImage.size)
         # 可视化数据
-        next_utils.visualize_image_with_bboxes(affineImage, affineBoundingBoxes)
+        next_utils.visualize_image_with_bboxes(augmentedImage, augmentedBoundingBoxes)
 
 
         return originalWidth, originalHeight
@@ -317,8 +322,139 @@ class VOC2007Dataset(Dataset):
         return transformedImage, transformedBboxes
 
 
+    # 数据增强：随机颜色变换
+    def random_color_augmentation(self, image, boundingBoxes, augmentationProb):
+        """
+        对图像进行随机颜色增强，不影响边界框标签
+
+        参数:
+        image: PIL Image对象
+        boundingBoxes: 边界框列表，格式为 [(name, (xmin, ymin, xmax, ymax)), ...]
+        augmentationProb: 执行颜色增强的概率 (0-1)
+
+        返回:
+        augmentedImage: 颜色增强后的PIL Image
+        boundingBoxes: 不变的边界框列表
+        """
+        # 以一定概率决定是否执行颜色增强
+        if random.random() > augmentationProb:
+            return image, boundingBoxes
+
+        # 将PIL图像转换为numpy数组以便使用OpenCV
+        cvImage = np.array(image)
+
+        # 随机选择一种或多种颜色增强方式
+        augmentationType = random.choice(['brightness', 'contrast', 'saturation', 'hue', 'multiple'])
+
+        if augmentationType == 'brightness':
+            # 随机亮度调整
+            brightnessFactor = random.uniform(0.7, 1.3)
+            hsv = cv2.cvtColor(cvImage, cv2.COLOR_RGB2HSV)
+            hsv[:, :, 2] = cv2.multiply(hsv[:, :, 2], brightnessFactor)
+            hsv[:, :, 2] = np.clip(hsv[:, :, 2], 0, 255)
+            augmentedCvImage = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
+
+        elif augmentationType == 'contrast':
+            # 随机对比度调整
+            contrastFactor = random.uniform(0.7, 1.3)
+            augmentedCvImage = cv2.convertScaleAbs(cvImage, alpha=contrastFactor, beta=0)
+
+        elif augmentationType == 'saturation':
+            # 随机饱和度调整
+            saturationFactor = random.uniform(0.7, 1.3)
+            hsv = cv2.cvtColor(cvImage, cv2.COLOR_RGB2HSV)
+            hsv[:, :, 1] = cv2.multiply(hsv[:, :, 1], saturationFactor)
+            hsv[:, :, 1] = np.clip(hsv[:, :, 1], 0, 255)
+            augmentedCvImage = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
+
+        elif augmentationType == 'hue':
+            # 随机色调调整
+            hueShift = random.randint(-10, 10)
+            hsv = cv2.cvtColor(cvImage, cv2.COLOR_RGB2HSV)
+            hsv[:, :, 0] = (hsv[:, :, 0] + hueShift) % 180
+            augmentedCvImage = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
+
+        else:  # 'multiple'
+            # 组合多种增强方式
+            augmentedCvImage = cvImage.copy()
+
+            # 亮度调整
+            if random.random() > 0.5:
+                brightnessFactor = random.uniform(0.8, 1.2)
+                hsv = cv2.cvtColor(augmentedCvImage, cv2.COLOR_RGB2HSV)
+                hsv[:, :, 2] = cv2.multiply(hsv[:, :, 2], brightnessFactor)
+                hsv[:, :, 2] = np.clip(hsv[:, :, 2], 0, 255)
+                augmentedCvImage = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
+
+            # 对比度调整
+            if random.random() > 0.5:
+                contrastFactor = random.uniform(0.8, 1.2)
+                augmentedCvImage = cv2.convertScaleAbs(augmentedCvImage, alpha=contrastFactor, beta=0)
+
+            # 饱和度调整
+            if random.random() > 0.5:
+                saturationFactor = random.uniform(0.8, 1.2)
+                hsv = cv2.cvtColor(augmentedCvImage, cv2.COLOR_RGB2HSV)
+                hsv[:, :, 1] = cv2.multiply(hsv[:, :, 1], saturationFactor)
+                hsv[:, :, 1] = np.clip(hsv[:, :, 1], 0, 255)
+                augmentedCvImage = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
+
+        # 确保像素值在有效范围内
+        augmentedCvImage = np.clip(augmentedCvImage, 0, 255).astype(np.uint8)
+
+        # 转换回PIL图像格式
+        augmentedImage = Image.fromarray(augmentedCvImage)
+
+        # 边界框保持不变
+        return augmentedImage, boundingBoxes
 
 
+    def resize_image_and_bboxes(self, image, boundingBoxes, targetSize):
+        """
+        将图像和边界框调整到指定尺寸
+
+        参数:
+        image: PIL Image对象
+        boundingBoxes: 边界框列表，格式为 [(name, (xmin, ymin, xmax, ymax)), ...]
+        targetSize: 目标尺寸，格式为 (width, height)
+
+        返回:
+        resizedImage: 调整尺寸后的PIL Image
+        resizedBboxes: 调整后的边界框列表，格式与输入相同
+        """
+        # 获取原始图像尺寸
+        originalWidth, originalHeight = image.size
+        targetWidth, targetHeight = targetSize
+
+        # 计算宽高缩放比例
+        scaleX = targetWidth / originalWidth
+        scaleY = targetHeight / originalHeight
+
+        # 调整图像尺寸
+        resizedImage = image.resize((targetWidth, targetHeight), Image.BILINEAR)
+
+        # 调整边界框坐标
+        resizedBboxes = []
+        for className, bbox in boundingBoxes:
+            xmin, ymin, xmax, ymax = bbox
+
+            # 根据缩放比例调整边界框坐标
+            newXmin = int(xmin * scaleX)
+            newYmin = int(ymin * scaleY)
+            newXmax = int(xmax * scaleX)
+            newYmax = int(ymax * scaleY)
+
+            # 确保边界框坐标在有效范围内
+            newXmin = max(0, min(newXmin, targetWidth))
+            newYmin = max(0, min(newYmin, targetHeight))
+            newXmax = max(0, min(newXmax, targetWidth))
+            newYmax = max(0, min(newYmax, targetHeight))
+
+            # 确保边界框有合理的尺寸
+            if newXmax - newXmin > 1 and newYmax - newYmin > 1:
+                resizedBboxes.append((className, (newXmin, newYmin, newXmax, newYmax)))
+
+        return resizedImage, resizedBboxes
 
 
 

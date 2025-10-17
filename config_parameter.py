@@ -4,6 +4,7 @@
 
 
 # 构建数据集时所需要用到的参数配置
+IMAGE_SIZE = (640, 640)
 RATIO = 0.3     # 训练集与验证集的比例设置
 BATCH_SIZE = 4
 NUM_WORKERS = 4
