@@ -21,6 +21,9 @@ import os
 from PIL import Image
 import xml.etree.ElementTree as ET
 import random
+import math
+import cv2
+import numpy as np
 
 
 
@@ -59,10 +62,21 @@ class VOC2007Dataset(Dataset):
                                                                           config_parameter.RANDOM_CROP_SCOPE[1])
 
 
+        # 数据增强：随机仿射变换
+        affineImage, affineBoundingBoxes = self.random_affine_transform(croppedImage,
+                                                                        croppedBoundingBoxes,
+                                                                        config_parameter.AFFINE_ROTATION,
+                                                                        config_parameter.AFFINE_TRANSLATION,
+                                                                        config_parameter.AFFINE_SCALE,
+                                                                        config_parameter.AFFINE_SHEAR,
+                                                                        config_parameter.AFFINE_FLIP,
+                                                                        config_parameter.RANDOM_AFFINE_RATIO,
+                                                                        config_parameter.AFFINE_BORDER)
 
 
-        # # 可视化数据
-        # next_utils.visualize_image_with_bboxes(croppedImage, croppedBoundingBoxes)
+        print(affineImage.size)
+        # 可视化数据
+        next_utils.visualize_image_with_bboxes(affineImage, affineBoundingBoxes)
 
 
         return originalWidth, originalHeight
@@ -159,13 +173,130 @@ class VOC2007Dataset(Dataset):
 
 
     # 数据增强：随机仿射变换
-    
+    def random_affine_transform(self, image, boundingBoxes, rotationRange, translationRange, scaleRange, shearRange,flipProb, transformProb, borderValue):
 
+        """
+        使用OpenCV进行更精确的仿射变换
 
+        参数:
+        image: PIL Image对象
+        bounding_boxes: 边界框列表
+        rotation_range: 旋转角度范围 (度)
+        translation_range: 平移范围 (相对于图像尺寸的比例)
+        scale_range: 缩放范围
+        shear_range: 剪切角度范围 (度)
+        flip_prob: 水平翻转的概率
+        transform_prob: 执行变换的概率
+        border_value: 边界填充值
 
+        返回:
+        transformed_image: 变换后的PIL Image
+        transformed_bboxes: 变换后对应的边界框列表
+        """
+        # 以一定概率决定是否执行变换
+        if random.random() > transformProb:
+            return image, boundingBoxes
 
+        # 获取图像尺寸
+        width, height = image.size
 
+        # 随机生成变换参数
+        rotation = random.uniform(rotationRange[0], rotationRange[1]) if rotationRange else 0
+        translationX = random.uniform(translationRange[0], translationRange[1]) * width if translationRange else 0
+        translationY = random.uniform(translationRange[0], translationRange[1]) * height if translationRange else 0
+        scale = random.uniform(scaleRange[0], scaleRange[1]) if scaleRange else 1.0
+        shearX = math.radians(random.uniform(shearRange[0], shearRange[1])) if shearRange else 0
+        shearY = math.radians(random.uniform(shearRange[0], shearRange[1])) if shearRange else 0
+        flip = random.random() < flipProb if flipProb else False
 
+        # 将PIL图像转换为OpenCV格式
+        cvImage = np.array(image)
+        cvImage = cv2.cvtColor(cvImage, cv2.COLOR_RGB2BGR)
+
+        # 水平翻转
+        if flip:
+            cv_image = cv2.flip(cvImage, 1)
+
+        # 计算变换矩阵
+        center = (width / 2, height / 2)
+
+        # 构建旋转矩阵
+        rotationMatrix = cv2.getRotationMatrix2D(center, rotation, scale)
+
+        # 添加剪切变换
+        shearMatrix = np.array([
+            [1, math.tan(shearX), 0],
+            [math.tan(shearY), 1, 0]
+        ], dtype=np.float32)
+
+        # 组合变换矩阵
+        affineMatrix = np.dot(rotationMatrix, shearMatrix)
+
+        # 添加平移
+        affineMatrix[0, 2] += translationX
+        affineMatrix[1, 2] += translationY
+
+        # 计算变换后的图像尺寸
+        cosTheta = abs(affineMatrix[0, 0])
+        sinTheta = abs(affineMatrix[0, 1])
+
+        newWidth = int(height * sinTheta + width * cosTheta)
+        newHeight = int(height * cosTheta + width * sinTheta)
+
+        # 调整变换矩阵，使变换后的图像居中
+        affineMatrix[0, 2] += (newWidth - width) / 2
+        affineMatrix[1, 2] += (newHeight - height) / 2
+
+        # 应用仿射变换
+        transformedCvImage = cv2.warpAffine(
+            cvImage, affineMatrix, (newWidth, newHeight),
+            flags=cv2.INTER_LINEAR, borderValue=borderValue
+        )
+
+        # 将OpenCV图像转换回PIL格式
+        transformedImage = Image.fromarray(
+            cv2.cvtColor(transformedCvImage, cv2.COLOR_BGR2RGB)
+        )
+
+        # 应用变换到边界框
+        transformedBboxes = []
+        for className, bbox in boundingBoxes:
+            xmin, ymin, xmax, ymax = bbox
+
+            # 水平翻转
+            if flip:
+                xmin, xmax = width - xmax, width - xmin
+
+            # 边界框的四个角点
+            corners = np.array([
+                [xmin, ymin, 1],
+                [xmax, ymin, 1],
+                [xmax, ymax, 1],
+                [xmin, ymax, 1]
+            ], dtype=np.float32)
+
+            # 应用变换到角点
+            transformedCorners = np.dot(affineMatrix, corners.T).T
+
+            # 计算变换后的边界框
+            newXmin = np.min(transformedCorners[:, 0])
+            newYmin = np.min(transformedCorners[:, 1])
+            newXmax = np.max(transformedCorners[:, 0])
+            newYmax = np.max(transformedCorners[:, 1])
+
+            # 确保边界框坐标在有效范围内
+            newXmin = max(0, min(newXmin, newWidth))
+            newYmin = max(0, min(newYmin, newHeight))
+            newXmax = max(0, min(newXmax, newWidth))
+            newYmax = max(0, min(newYmax, newHeight))
+
+            # 确保边界框有合理的尺寸
+            if newXmax - newXmin > 1 and newYmax - newYmin > 1:
+                transformedBboxes.append(
+                    (className, (int(newXmin), int(newYmin), int(newXmax), int(newYmax)))
+                )
+
+        return transformedImage, transformedBboxes
 
 
 

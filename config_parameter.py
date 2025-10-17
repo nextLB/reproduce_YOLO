@@ -11,7 +11,12 @@ RANDOM_CROP_RATIO = 0.5  # 构建数据集时对于数据进行随机裁剪的�
 RANDOM_AFFINE_RATIO = 0.5  # 构建数据集时对于数据进行仿射变换的比例
 RANDOM_COLOR_RATIO = 0.5  # 对数据集进行随机颜色调整的比例
 RANDOM_CROP_SCOPE = (0.3, 1)       # 构建数据集时对于数据进行随机裁剪的比例范围
-
+AFFINE_ROTATION = (-30, 30)        # 进行仿射变换时的旋转角度范围 (度)
+AFFINE_TRANSLATION = (-0.2, 0.2)     # 进行仿射变换时的平移范围 (相对于图像尺寸的比例)
+AFFINE_SCALE = (0.8, 1.2)       # 进行仿射变换时的缩放范围
+AFFINE_SHEAR = (-10, 10)       # 进行仿射变换时的剪切角度范围 (度)
+AFFINE_FLIP = 0.5        # 进行仿射变换时的水平翻转的概率
+AFFINE_BORDER = (128, 128, 128)      # 进行仿射变换时的边界填充值
 
 
 
