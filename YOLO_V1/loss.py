@@ -133,8 +133,22 @@ class YOLOv1Loss(nn.Module):
         # 无目标置信度损失，权重为0.5
         # 分类损失，权重为1
         total = self.lCoord * (posLosses + dimLosses) + objConfidenceLosses + self.lNoobj * noobjConfidenceLosses + classLosses
+        total /= BATCH_SIZE
 
-        return total / BATCH_SIZE
+        lossComponents = {
+            'coordLoss': 0,
+            'objLoss': 0,
+            'noObjLoss': 0,
+            'classLoss': 0
+        }
+
+
+        lossComponents['coordLoss'] += dimLosses.item()
+        lossComponents['objLoss'] += objConfidenceLosses.item()
+        lossComponents['noObjLoss'] += noobjConfidenceLosses.item()
+        lossComponents['classLoss'] += classLosses.item()
+
+        return total, lossComponents
 
 
     def _build_targets(self, targets):

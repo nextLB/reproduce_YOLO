@@ -81,65 +81,118 @@ def YOLOV1_VOC2007_TRAIN_MAIN():
             # 前向传播
             predictions = model(images)
 
-            trainTotalLoss = criterion(predictions, targets)
 
-            print(trainTotalLoss)
+            # 计算损失
+            totalLoss, lossComponents = criterion(predictions, targets)
+
+            # 反向传播
+            optimizer.zero_grad()
+            totalLoss.backward()
+            optimizer.step()
+
+            trainTotalLoss += totalLoss.item()
+
+            # 累计损失分量
+            epochCoordLoss += lossComponents["coordLoss"]
+            epochObjLoss += lossComponents["objLoss"]
+            epochNoobjLoss += lossComponents["noObjLoss"]
+            epochClassLoss += lossComponents["classLoss"]
+
+            # 记录每个batch的训练损失到TensorBoard
+            writer.add_scalar('Train/Batch_Total_Loss', totalLoss.item(), globalStep)
+            writer.add_scalar('Train/Batch_Coord_Loss', lossComponents["coordLoss"], globalStep)
+            writer.add_scalar('Train/Batch_Obj_Loss', lossComponents["objLoss"], globalStep)
+            writer.add_scalar('Train/Batch_NoObj_Loss', lossComponents["noObjLoss"], globalStep)
+            writer.add_scalar('Train/Batch_Class_Loss', lossComponents["classLoss"], globalStep)
+
+            globalStep += 1  # 更新全局步数
+
+            # 更新进度条
+            trainLoop.set_postfix({
+                'Total Loss': f'{totalLoss.item():.4f}',
+                'Coord Loss': f'{lossComponents["coordLoss"]:.4f}',
+                'Obj Loss': f'{lossComponents["objLoss"]:.4f}',
+                'NoObj Loss': f'{lossComponents["noObjLoss"]:.4f}',
+                'Class Loss': f'{lossComponents["classLoss"]:.4f}'
+            })
+
+        # 记录每个epoch的平均训练损失
+        avgTrainLoss = trainTotalLoss / len(trainDataLoader)
+        writer.add_scalar('Train/Epoch_Total_Loss', avgTrainLoss, epoch)
+        writer.add_scalar('Train/Epoch_Coord_Loss', epochCoordLoss / len(trainDataLoader), epoch)
+        writer.add_scalar('Train/Epoch_Obj_Loss', epochObjLoss / len(trainDataLoader), epoch)
+        writer.add_scalar('Train/Epoch_NoObj_Loss', epochNoobjLoss / len(trainDataLoader), epoch)
+        writer.add_scalar('Train/Epoch_Class_Loss', epochClassLoss / len(trainDataLoader), epoch)
+
+        # 记录学习率
+        current_lr = scheduler.get_last_lr()[0]
+        writer.add_scalar('Train/Learning_Rate', current_lr, epoch)
+
+        # 更新学习率
+        scheduler.step()
+
+        # 打印epoch统计信息
+        print(f'Epoch {epoch + 1}/{config_parameter.MAX_EPOCHS}, Average Loss: {avgTrainLoss:.4f}')
+
+        # 如果符合轮次要求就进行验证
+        if epoch % 5 == 0:
+            model.eval()
+            valTotalLoss = 0
+            valLoop = tqdm(valDataLoader, desc="valing")
+
+            valCoordLoss = 0
+            valObjLoss = 0
+            valNoobjLoss = 0
+            valClassLoss = 0
+            for batchIdx, (images, targets) in enumerate(valLoop):
+                images = images.to(device)
+                targets = targets.to(device)
+
+                # 前向传播
+                predictions = model(images)
+
+                # 计算损失
+                totalLoss, lossComponents = criterion(predictions, targets)
+
+                valTotalLoss += totalLoss.item()
+
+                valCoordLoss += lossComponents["coordLoss"]
+                valObjLoss += lossComponents["objLoss"]
+                valNoobjLoss += lossComponents["noObjLoss"]
+                valClassLoss += lossComponents["classLoss"]
+
+                # 更新进度条
+                valLoop.set_postfix({
+                    'Total Loss': f'{totalLoss.item():.4f}',
+                    'Coord Loss': f'{lossComponents["coordLoss"]:.4f}',
+                    'Obj Loss': f'{lossComponents["objLoss"]:.4f}',
+                    'NoObj Loss': f'{lossComponents["noObjLoss"]:.4f}',
+                    'Class Loss': f'{lossComponents["classLoss"]:.4f}'
+                })
+
+            # 打印epoch统计信息
+            # 记录验证损失到TensorBoard - 新增
+            avgValLoss = valTotalLoss / len(valDataLoader)
+            writer.add_scalar('Val/Epoch_Total_Loss', avgValLoss, epoch)
+            writer.add_scalar('Val/Epoch_Coord_Loss', valCoordLoss / len(valDataLoader), epoch)
+            writer.add_scalar('Val/Epoch_Obj_Loss', valObjLoss / len(valDataLoader), epoch)
+            writer.add_scalar('Val/Epoch_NoObj_Loss', valNoobjLoss / len(valDataLoader), epoch)
+            writer.add_scalar('Val/Epoch_Class_Loss', valClassLoss / len(valDataLoader), epoch)
+            print(f'Epoch {epoch + 1}/{config_parameter.MAX_EPOCHS}, Average Loss: {avgValLoss:.4f}')
+
+            if avgValLoss <= bestValLoss:
+                bestValLoss = avgValLoss
+                torch.save(model.state_dict(), os.path.join(saveModelPath, "YOLO_V3_low_loss.pth"))
+                print(f"模型已保存至 {saveModelPath}")
 
 
+    # 关闭TensorBoard writer
+    writer.close()
 
-        #     # 计算损失
-        #     totalLoss, lossComponents = criterion(predictions, targets)
-        #
-        #     # 反向传播
-        #     optimizer.zero_grad()
-        #     totalLoss.backward()
-        #     optimizer.step()
-        #
-        #     trainTotalLoss += totalLoss.item()
-        #
-        #     # 累计损失分量
-        #     epochCoordLoss += lossComponents["coordLoss"]
-        #     epochObjLoss += lossComponents["objLoss"]
-        #     epochNoobjLoss += lossComponents["noObjLoss"]
-        #     epochClassLoss += lossComponents["classLoss"]
-        #
-        #     # 记录每个batch的训练损失到TensorBoard
-        #     writer.add_scalar('Train/Batch_Total_Loss', totalLoss.item(), globalStep)
-        #     writer.add_scalar('Train/Batch_Coord_Loss', lossComponents["coordLoss"], globalStep)
-        #     writer.add_scalar('Train/Batch_Obj_Loss', lossComponents["objLoss"], globalStep)
-        #     writer.add_scalar('Train/Batch_NoObj_Loss', lossComponents["noObjLoss"], globalStep)
-        #     writer.add_scalar('Train/Batch_Class_Loss', lossComponents["classLoss"], globalStep)
-        #
-        #     globalStep += 1  # 更新全局步数
-        #
-        #     # 更新进度条
-        #     trainLoop.set_postfix({
-        #         'Total Loss': f'{totalLoss.item():.4f}',
-        #         'Coord Loss': f'{lossComponents["coordLoss"]:.4f}',
-        #         'Obj Loss': f'{lossComponents["objLoss"]:.4f}',
-        #         'NoObj Loss': f'{lossComponents["noObjLoss"]:.4f}',
-        #         'Class Loss': f'{lossComponents["classLoss"]:.4f}'
-        #     })
-        #
-        # # 记录每个epoch的平均训练损失
-        # avgTrainLoss = trainTotalLoss / len(trainDataLoader)
-        # writer.add_scalar('Train/Epoch_Total_Loss', avgTrainLoss, epoch)
-        # writer.add_scalar('Train/Epoch_Coord_Loss', epochCoordLoss / len(trainDataLoader), epoch)
-        # writer.add_scalar('Train/Epoch_Obj_Loss', epochObjLoss / len(trainDataLoader), epoch)
-        # writer.add_scalar('Train/Epoch_NoObj_Loss', epochNoobjLoss / len(trainDataLoader), epoch)
-        # writer.add_scalar('Train/Epoch_Class_Loss', epochClassLoss / len(trainDataLoader), epoch)
-        #
-        # # 记录学习率
-        # current_lr = scheduler.get_last_lr()[0]
-        # writer.add_scalar('Train/Learning_Rate', current_lr, epoch)
-        #
-        # # 更新学习率
-        # scheduler.step()
-        #
-        # # 打印epoch统计信息
-        # print(f'Epoch {epoch + 1}/{config_parameter.MAX_EPOCHS}, Average Loss: {avgTrainLoss:.4f}')
-
-
+    # 清除缓存
+    del model
+    gc.collect()
+    torch.cuda.empty_cache()
 
 
 
