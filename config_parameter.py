@@ -6,7 +6,7 @@
 # 构建数据集时所需要用到的参数配置
 IMAGE_SIZE = (448, 448)
 RATIO = 0.3     # 训练集与验证集的比例设置
-BATCH_SIZE = 32
+BATCH_SIZE = 16
 NUM_WORKERS = 16
 RANDOM_CROP_RATIO = 0.5  # 构建数据集时对于数据进行随机裁剪的比例
 RANDOM_AFFINE_RATIO = 0.5  # 构建数据集时对于数据进行仿射变换的比例
