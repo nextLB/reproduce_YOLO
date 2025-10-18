@@ -9,7 +9,7 @@
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+
 
 
 ANCHORS = [
@@ -49,9 +49,9 @@ class YOLOv3Loss(nn.Module):
         self.lambdaClass = 1.0
 
         # 将锚框转换为适合三个尺度的格式
-        self.anchorBoxes = self._processAnchors(ANCHORS)
+        self.anchorBoxes = self._process_anchors(ANCHORS)
 
-    def _processAnchors(self, anchors):
+    def _process_anchors(self, anchors):
         """处理锚框，为每个尺度创建锚框张量"""
         processedAnchors = []
         for anchorGroup in anchors:
@@ -59,7 +59,7 @@ class YOLOv3Loss(nn.Module):
             processedAnchors.append(anchorTensor)
         return processedAnchors
 
-    def _buildTargets(self, predictions, groundTruths, anchorIndices):
+    def _build_targets(self, predictions, groundTruths, anchorIndices):
         """
         构建目标张量，将ground truth映射到对应的预测尺度
         """
@@ -171,8 +171,8 @@ class YOLOv3Loss(nn.Module):
             predConf = pred[..., 4]
             predClass = pred[..., 5:]
 
-            # 构建目标
-            objMask, noObjMask, tx, ty, tw, th, tConf, tClass = self._buildTargets(
+            # 构建目标      生成适合yolov3计算的目标值
+            objMask, noObjMask, tx, ty, tw, th, tConf, tClass = self._build_targets(
                 pred, groundTruths, scaleIdx
             )
 

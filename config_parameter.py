@@ -4,7 +4,7 @@
 
 
 # 构建数据集时所需要用到的参数配置
-IMAGE_SIZE = (480, 480)
+IMAGE_SIZE = (448, 448)
 RATIO = 0.3     # 训练集与验证集的比例设置
 BATCH_SIZE = 8
 NUM_WORKERS = 8
@@ -27,7 +27,7 @@ TARGETS_SIZE = 100
 
 # 模型训练时的参数配置
 MAX_EPOCHS = 100
-LEARNING_RATE = 0.01
+LEARNING_RATE = 0.0001
 MOMENTUM = 0.937
 WEIGHT_DECAY = 0.0005
 
