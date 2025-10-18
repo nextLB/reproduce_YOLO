@@ -44,7 +44,7 @@ class YOLOv1ResNet(nn.Module):
 
 
         # # Load backbone ResNet34
-        # self.backbone = resnet50(weights=ResNet50_Weights.DEFAULT)
+        # self.backbone = resnet34(weights=ResNet34_Weights.DEFAULT)
         # self.backbone.requires_grad_(False)      # Freeze backbone weights
         #
         # # Delete last two layers and attach detection layers
