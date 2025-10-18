@@ -18,7 +18,7 @@ ANCHORS = [
             [(116, 90), (156, 198), (373, 326)]  # P5/32
         ]
 NUM_CLASSES = 20
-IMAGE_SIZE = 640
+IMAGE_SIZE = 480
 
 
 
