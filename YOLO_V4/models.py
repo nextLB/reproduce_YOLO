@@ -60,5 +60,213 @@ class ResidualBlock(nn.Module):
 class CspBlock(nn.Module):
     def __init__(self, inChannels, outChannels, numBlocks):
         super(CspBlock, self).__init__()
-        self.downSample = ConvBnMish(inChannels, outChannels, )
+        self.downSample = ConvBnMish(inChannels, outChannels, 3, stride=2, padding=1)
+
+        midChannels = outChannels // 2
+        self.splitConv0 = ConvBnMish(outChannels, midChannels, 1)
+        self.splitConv1 = ConvBnMish(outChannels, midChannels, 1)
+
+        self.blocks = nn.Sequential(*[ResidualBlock(midChannels) for _ in range(numBlocks)])
+
+        self.concatConv = ConvBnMish(midChannels * 2, outChannels, 1)
+
+    def forward(self, x):
+        x = self.downSample(x)
+
+        x0 = self.splitConv0(x)
+        x1 = self.splitConv1(x)
+        x1 = self.blocks(x1)
+
+        x = torch.cat([x1, x0], dim=1)
+        x = self.concatConv(x)
+        return x
+
+
+# CSPDarknet53骨干网络
+class CspDarknet53(nn.Module):
+    def __init__(self):
+        super(CspDarknet53, self).__init__()
+        self.conv1 = ConvBnMish(3, 32, 3, padding=1)
+        self.layer1 = CspBlock(32, 64, 1)   # P1
+        self.layer2 = CspBlock(64, 128, 2)  # P2
+        self.layer3 = CspBlock(128, 256, 8)  # P3
+        self.layer4 = CspBlock(256, 512, 8)     # P4
+        self.layer5 = CspBlock(512, 1024, 4)    # P5
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.layer1(x)  # P1
+        x = self.layer2(x)  # P2
+        p3 = self.layer3(x) # P3
+        p4 = self.layer4(p3) # P4
+        p5 = self.layer5(p4) # P5
+        return p3, p4, p5
+
+
+
+# SPP模块
+class SpatialPyramidPooling(nn.Module):
+    def __init__(self, inChannels, outChannels):
+        super(SpatialPyramidPooling, self).__init__()
+        midChannels = inChannels // 2
+        self.conv1 = ConvBnMish(inChannels, midChannels, 1)
+        self.conv2 = ConvBnMish(midChannels * 4, outChannels, 1)
+
+        self.pool1 = nn.MaxPool2d(5, stride=1, padding=2)
+        self.pool2 = nn.MaxPool2d(9, stride=1, padding=4)
+        self.pool3 = nn.MaxPool2d(13, stride=1, padding=6)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        p1 = self.pool1(x)
+        p2 = self.pool2(x)
+        p3 = self.pool3(x)
+        x = torch.cat([x, p1, p2, p3], dim=1)
+        x = self.conv2(x)
+        return x
+
+
+# 上采样模块
+class UpsampleBlock(nn.Module):
+    def __init__(self, inChannels, outChannels):
+        super(UpsampleBlock, self).__init__()
+        self.conv = ConvBnMish(inChannels, outChannels, 1)
+        self.upsample = nn.Upsample(scale_factor=2, mode='nearest')
+
+    def forward(self, x):
+        x = self.conv(x)
+        x = self.upsample(x)
+        return x
+
+
+# PANet路径聚合网络
+class PathAggregationNetwork(nn.Module):
+    def __init__(self):
+        super(PathAggregationNetwork, self).__init__()
+        # 上采样路径
+        self.upsample1 = UpsampleBlock(512, 256)
+        self.upsample2 = UpsampleBlock(256, 128)
+
+        # 下采样路径
+        self.downSample1 = ConvBnMish(256, 256, 3, stride=2, padding=1)
+        self.downSample2 = ConvBnMish(512, 512, 3, stride=2, padding=1)
+
+        # 特征融合卷积
+        self.convP3 = ConvBnMish(256, 256, 3, padding=1)
+        self.convP4 = ConvBnMish(512, 512, 3, padding=1)
+        self.convP5 = ConvBnMish(1024, 512, 3, padding=1)
+
+    def forward(self, p3, p4, p5):
+        # 上采样路径
+        p5Up = self.upsample1(p5)
+        p4 = p4 + p5Up
+
+        p4Up = self.upsample2(p4)
+        p3 = p3 + p4Up
+
+        # 下采样路径
+        p3Down = self.downSample1(p3)
+        p4 = p4 + p3Down
+
+        p4Down = self.downSample2(p4)
+        p5 = p5 + p4Down
+
+        # 最终特征图
+        p3 = self.convP3(p3)
+        p4 = self.convP4(p4)
+        p5 = self.convP5(p5)
+
+        return p3, p4, p5
+
+
+# YOLO检测头
+class YoloHead(nn.Module):
+    def __init__(self, inChannels, numAnchors, numClasses):
+        super(YoloHead, self).__init__()
+        self.numAnchors = numAnchors
+        self.numClasses = numClasses
+
+        self.conv1 = ConvBnMish(inChannels, inChannels * 2, 3, padding=1)
+        self.conv2 = nn.Conv2d(inChannels * 2, numAnchors * (5 + numClasses), 1)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.conv2(x)
+
+        # 调整输出形状: [batch, anchors*(5+numClasses), height, width] ->
+        # [batch, anchors, height, width, 5+numClasses]
+        batch, _, height, width = x.size()
+        x = x.view(batch, self.numAnchors, 5 + self.numClasses, height, width)
+        x = x.permute(0, 1, 3, 4, 2).contiguous()
+
+        return x
+
+
+
+# 完整的YOLOV4模型
+class YOLOv4(nn.Module):
+    def __init__(self, numClasses, numAnchors):
+        super(YOLOv4, self).__init__()
+        self.numClasses = numClasses
+        self.numAnchors = numAnchors
+
+        # 骨干网络
+        self.backbone = CspDarknet53()
+
+        # SPP模块
+        self.spp = SpatialPyramidPooling(1024, 512)
+
+        # 颈部网络
+        self.neck = PathAggregationNetwork()
+
+        # 检测头
+        self.headP3 = YoloHead(256, numAnchors, numClasses)
+        self.headP4 = YoloHead(512, numAnchors, numClasses)
+        self.headP5 = YoloHead(512, numAnchors, numClasses)
+
+        # 初始化权重
+        self._initializeWeights()
+
+    def forward(self, x):
+        # 骨干网络
+        p3, p4, p5 = self.backbone(x)
+
+        # SPP模块
+        p5 = self.spp(p5)
+
+        # 颈部网络
+        p3, p4, p5 = self.neck(p3, p4, p5)
+
+        # 检测头
+        outP3 = self.headP3(p3)  # 小目标检测
+        outP4 = self.headP4(p4)  # 中目标检测
+        outP5 = self.headP5(p5)  # 大目标检测
+
+        return outP3, outP4, outP5
+
+    def _initializeWeights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+
+
+# 设置设备
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+def main():
+
+    model = YOLOv4(numClasses=20, numAnchors=3).to(device)
+
+    return model
+
+
+
+if __name__ == '__main__':
+    main()
+
 
