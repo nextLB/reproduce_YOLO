@@ -397,6 +397,9 @@ def YOLOV4_VOC2007_TRAIN_MAIN():
     # 学习率调度器  多步学习率调度器   milestones=[50, 80]: 触发学习率调整的epoch位置   gamma=0.1: 学习率衰减的乘数因子
     scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[30, 50, 80], gamma=0.1)
 
+    # 创建损失函数
+    criterion = YOLO_V4.loss.main()
+
     # 记录模型图结构
     sampleImages, _ = next(iter(trainDataLoader))
     sampleImages = sampleImages.to(device)
@@ -413,8 +416,7 @@ def YOLOV4_VOC2007_TRAIN_MAIN():
 
         # 记录每个epoch的训练损失分量累计值
         epochCoordLoss = 0
-        epochObjLoss = 0
-        epochNoobjLoss = 0
+        epochConfLoss = 0
         epochClassLoss = 0
         for batchIdx, (images, targets) in enumerate(trainLoop):
             images = images.to(device)
@@ -423,10 +425,100 @@ def YOLOV4_VOC2007_TRAIN_MAIN():
             # 前向传播
             predictions = model(images)
 
-            print(predictions[0].shape, targets.shape)
+            # 计算损失
+            totalLoss, lossComponents = criterion(predictions, targets)
 
+            # 反向传播
+            optimizer.zero_grad()
+            totalLoss.backward()
+            optimizer.step()
 
+            trainTotalLoss += totalLoss.item()
 
+            # 累计损失分量
+            epochCoordLoss += lossComponents["coordLoss"]
+            epochConfLoss += lossComponents['confLoss']
+            epochClassLoss += lossComponents["classLoss"]
+
+            # 记录每个batch的训练损失到TensorBoard
+            writer.add_scalar('Train/Batch_Total_Loss', totalLoss.item(), globalStep)
+            writer.add_scalar('Train/Batch_Coord_Loss', lossComponents["coordLoss"], globalStep)
+            writer.add_scalar('Train/Batch_Conf_Loss', lossComponents['confLoss'], globalStep)
+            writer.add_scalar('Train/Batch_Class_Loss', lossComponents["classLoss"], globalStep)
+
+            globalStep += 1  # 更新全局步数
+
+            # 更新进度条
+            trainLoop.set_postfix({
+                'Total Loss': f'{totalLoss.item():.4f}',
+                'Coord Loss': f'{lossComponents["coordLoss"]:.4f}',
+                'Confidence Loss': f'{lossComponents["confLoss"]:.4f}',
+                'Class Loss': f'{lossComponents["classLoss"]:.4f}'
+            })
+
+        # 记录每个epoch的平均训练损失
+        avgTrainLoss = trainTotalLoss / len(trainDataLoader)
+        writer.add_scalar('Train/Epoch_Total_Loss', avgTrainLoss, epoch)
+        writer.add_scalar('Train/Epoch_Coord_Loss', epochCoordLoss / len(trainDataLoader), epoch)
+        writer.add_scalar('Train/Batch_Conf_Loss', epochConfLoss / len(trainDataLoader), epoch)
+        writer.add_scalar('Train/Epoch_Class_Loss', epochClassLoss / len(trainDataLoader), epoch)
+
+        # 记录学习率
+        current_lr = scheduler.get_last_lr()[0]
+        writer.add_scalar('Train/Learning_Rate', current_lr, epoch)
+
+        # 更新学习率
+        scheduler.step()
+
+        # 打印epoch统计信息
+        print(f'Epoch {epoch + 1}/{config_parameter.MAX_EPOCHS}, Average Loss: {avgTrainLoss:.4f}')
+
+        # 如果符合轮次要求就进行验证
+        if epoch % 5 == 0:
+            model.eval()
+            valTotalLoss = 0
+            valLoop = tqdm(valDataLoader, desc="valing")
+
+            valCoordLoss = 0
+            valConfLoss = 0
+            valClassLoss = 0
+            for batchIdx, (images, targets) in enumerate(valLoop):
+                images = images.to(device)
+                targets = targets.to(device)
+
+                # 前向传播
+                predictions = model(images)
+
+                # 计算损失
+                totalLoss, lossComponents = criterion(predictions, targets)
+
+                valTotalLoss += totalLoss.item()
+
+                valCoordLoss += lossComponents["coordLoss"]
+                valConfLoss += lossComponents["confLoss"]
+                valClassLoss += lossComponents["classLoss"]
+
+                # 更新进度条
+                valLoop.set_postfix({
+                    'Total Loss': f'{totalLoss.item():.4f}',
+                    'Coord Loss': f'{lossComponents["coordLoss"]:.4f}',
+                    'Confidence Loss': f'{lossComponents["confLoss"]:.4f}',
+                    'Class Loss': f'{lossComponents["classLoss"]:.4f}'
+                })
+
+            # 打印epoch统计信息
+            # 记录验证损失到TensorBoard - 新增
+            avgValLoss = valTotalLoss / len(valDataLoader)
+            writer.add_scalar('Val/Epoch_Total_Loss', avgValLoss, epoch)
+            writer.add_scalar('Val/Epoch_Coord_Loss', valCoordLoss / len(valDataLoader), epoch)
+            writer.add_scalar('Val/Epoch_Confidence_Loss', valConfLoss / len(valDataLoader), epoch)
+            writer.add_scalar('Val/Epoch_Class_Loss', valClassLoss / len(valDataLoader), epoch)
+            print(f'Epoch {epoch + 1}/{config_parameter.MAX_EPOCHS}, Average Loss: {avgValLoss:.4f}')
+
+            if avgValLoss <= bestValLoss:
+                bestValLoss = avgValLoss
+                torch.save(model.state_dict(), os.path.join(saveModelPath, "YOLO_V4_low_loss.pth"))
+                print(f"模型已保存至 {saveModelPath}")
 
     # 关闭TensorBoard writer
     writer.close()
