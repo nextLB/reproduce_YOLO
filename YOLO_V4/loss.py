@@ -286,11 +286,19 @@ class YOLOv4Loss(nn.Module):
 
         return ciouLoss.mean()
 
-
     def calculateCIoULoss(self, predBoxes, targetBoxes):
         """
         计算Complete IoU损失
         """
+        # 添加数值稳定性检查
+        if torch.isnan(predBoxes).any() or torch.isnan(targetBoxes).any():
+            print("Warning: NaN detected in CIoU input boxes")
+            return torch.tensor(0.0, device=predBoxes.device)
+
+        # 确保边界框坐标合理
+        predBoxes = torch.clamp(predBoxes, min=0.0, max=1.0)
+        targetBoxes = torch.clamp(targetBoxes, min=0.0, max=1.0)
+
         # 转换为 [x1, y1, x2, y2] 格式
         predX1 = predBoxes[:, 0] - predBoxes[:, 2] / 2
         predY1 = predBoxes[:, 1] - predBoxes[:, 3] / 2
@@ -301,6 +309,17 @@ class YOLOv4Loss(nn.Module):
         targetY1 = targetBoxes[:, 1] - targetBoxes[:, 3] / 2
         targetX2 = targetBoxes[:, 0] + targetBoxes[:, 2] / 2
         targetY2 = targetBoxes[:, 1] + targetBoxes[:, 3] / 2
+
+        # 确保边界框坐标有效
+        predX1 = torch.clamp(predX1, min=0.0, max=1.0)
+        predY1 = torch.clamp(predY1, min=0.0, max=1.0)
+        predX2 = torch.clamp(predX2, min=0.0, max=1.0)
+        predY2 = torch.clamp(predY2, min=0.0, max=1.0)
+
+        targetX1 = torch.clamp(targetX1, min=0.0, max=1.0)
+        targetY1 = torch.clamp(targetY1, min=0.0, max=1.0)
+        targetX2 = torch.clamp(targetX2, min=0.0, max=1.0)
+        targetY2 = torch.clamp(targetY2, min=0.0, max=1.0)
 
         # 计算IoU
         interX1 = torch.max(predX1, targetX1)
@@ -315,6 +334,11 @@ class YOLOv4Loss(nn.Module):
         unionArea = predArea + targetArea - interArea + self.eps
 
         iou = interArea / unionArea
+
+        # 检查iou是否有效
+        if torch.isnan(iou).any() or torch.isinf(iou).any():
+            print("Warning: Invalid IoU values detected")
+            return torch.ones_like(iou, device=predBoxes.device)
 
         # 计算中心点距离
         predCenterX = predBoxes[:, 0]
@@ -336,7 +360,11 @@ class YOLOv4Loss(nn.Module):
         predW, predH = predBoxes[:, 2], predBoxes[:, 3]
         targetW, targetH = targetBoxes[:, 2], targetBoxes[:, 3]
 
-        v = (4 / (math.pi ** 2)) * torch.pow(torch.atan(targetW / targetH) - torch.atan(predW / predH), 2)
+        # 避免除零
+        predRatio = predW / torch.clamp(predH, min=1e-7)
+        targetRatio = targetW / torch.clamp(targetH, min=1e-7)
+
+        v = (4 / (math.pi ** 2)) * torch.pow(torch.atan(targetRatio) - torch.atan(predRatio), 2)
 
         with torch.no_grad():
             alpha = v / (1 - iou + v + self.eps)
@@ -344,7 +372,11 @@ class YOLOv4Loss(nn.Module):
         # 计算CIoU
         ciou = iou - (centerDistance / encloseDiagonal) - alpha * v
 
+        # 确保ciou在有效范围内
+        ciou = torch.clamp(ciou, min=-1.0, max=1.0)
+
         return 1 - ciou
+
 
     def calculateConfidenceLoss(self, predConf, targetConf, targetMask):
         """
@@ -355,11 +387,22 @@ class YOLOv4Loss(nn.Module):
         # 无目标的位置
         negMask = ~posMask
 
-        # 有目标的置信度损失
-        posLoss = F.binary_cross_entropy(predConf[posMask], targetConf[posMask], reduction='sum')
+        # 确保预测值在有效范围内
+        predConf = torch.clamp(predConf, min=1e-7, max=1.0 - 1e-7)
 
-        # 无目标的置信度损失 (使用较小的权重)
-        negLoss = F.binary_cross_entropy(predConf[negMask], targetConf[negMask], reduction='sum')
+        # 确保目标值在有效范围内
+        targetConf = torch.clamp(targetConf, min=0.0, max=1.0)
+
+        # 检查是否有有效的位置
+        if posMask.sum() > 0:
+            posLoss = F.binary_cross_entropy(predConf[posMask], targetConf[posMask], reduction='sum')
+        else:
+            posLoss = torch.tensor(0.0, device=predConf.device)
+
+        if negMask.sum() > 0:
+            negLoss = F.binary_cross_entropy(predConf[negMask], targetConf[negMask], reduction='sum')
+        else:
+            negLoss = torch.tensor(0.0, device=predConf.device)
 
         # 计算平均损失
         numPos = max(posMask.sum().item(), 1)
@@ -374,6 +417,7 @@ class YOLOv4Loss(nn.Module):
 
         return totalLoss
 
+
     def calculateClassLoss(self, predCls, targetCls, targetMask):
         """
         计算类别损失
@@ -386,6 +430,11 @@ class YOLOv4Loss(nn.Module):
 
         predPos = predCls[posMask]
         targetPos = targetCls[posMask]
+
+        # 确保预测值在有效范围内
+        predPos = torch.clamp(predPos, min=1e-7, max=1.0 - 1e-7)
+        # 确保目标值在有效范围内
+        targetPos = torch.clamp(targetPos, min=0.0, max=1.0)
 
         # 使用二元交叉熵损失
         clsLoss = F.binary_cross_entropy(predPos, targetPos, reduction='mean')
