@@ -3,6 +3,7 @@
 """
 
 # 2025.10.18 (V1.1)            --- by next, 初步构建了YOLOV4的模型架构
+# 2025.10.18 (V1.4)            --- 修复PANet中的卷积通道不匹配问题
 
 
 
@@ -13,8 +14,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from collections import OrderedDict
-import math
+
 
 
 
@@ -130,6 +130,7 @@ class SpatialPyramidPooling(nn.Module):
 class UpsampleBlock(nn.Module):
     def __init__(self, inChannels, outChannels):
         super(UpsampleBlock, self).__init__()
+        # 先调整通道数，再上采样
         self.conv = ConvBnMish(inChannels, outChannels, 1)
         self.upsample = nn.Upsample(scale_factor=2, mode='nearest')
 
@@ -139,44 +140,68 @@ class UpsampleBlock(nn.Module):
         return x
 
 
+# 下采样模块
+class DownsampleBlock(nn.Module):
+    def __init__(self, inChannels, outChannels):
+        super(DownsampleBlock, self).__init__()
+        self.conv = ConvBnMish(inChannels, outChannels, 3, stride=2, padding=1)
+
+    def forward(self, x):
+        return self.conv(x)
+
+
 # PANet路径聚合网络
 class PathAggregationNetwork(nn.Module):
     def __init__(self):
         super(PathAggregationNetwork, self).__init__()
-        # 上采样路径
-        self.upsample1 = UpsampleBlock(512, 256)
-        self.upsample2 = UpsampleBlock(256, 128)
 
-        # 下采样路径
-        self.downSample1 = ConvBnMish(256, 256, 3, stride=2, padding=1)
-        self.downSample2 = ConvBnMish(512, 512, 3, stride=2, padding=1)
+        # 上采样路径（自顶向下）
+        # P5 -> P4
+        self.upsampleP5 = UpsampleBlock(512, 256)  # 输入512，输出256
 
-        # 特征融合卷积
-        self.convP3 = ConvBnMish(256, 256, 3, padding=1)
-        self.convP4 = ConvBnMish(512, 512, 3, padding=1)
-        self.convP5 = ConvBnMish(1024, 512, 3, padding=1)
+        # P4 -> P3
+        self.upsampleP4 = UpsampleBlock(512, 256)  # 输入512，输出256
+
+        # 下采样路径（自底向上）
+        # P3 -> P4
+        self.downsampleP3 = DownsampleBlock(256, 256)  # 输入256，输出256
+
+        # P4 -> P5
+        self.downsampleP4 = DownsampleBlock(512, 512)  # 输入512，输出512
+
+        # 特征融合卷积 - 修正输入通道数
+        # 上采样路径的融合卷积
+        self.convP4_1 = ConvBnMish(768, 512, 3, padding=1)  # 融合P4(512)和上采样的P5(256) -> 768输入
+        self.convP3_1 = ConvBnMish(512, 256, 3, padding=1)  # 融合P3(256)和上采样的P4(256) -> 512输入
+
+        # 下采样路径的融合卷积
+        self.convP4_2 = ConvBnMish(768, 512, 3, padding=1)  # 融合P4_1(512)和下采样的P3(256) -> 768输入
+        self.convP5_2 = ConvBnMish(1024, 512, 3, padding=1)  # 融合P5(512)和下采样的P4(512) -> 1024输入
 
     def forward(self, p3, p4, p5):
-        # 上采样路径
-        p5Up = self.upsample1(p5)
-        p4 = p4 + p5Up
+        # 上采样路径（自顶向下）
+        # P5 -> P4
+        p5_up = self.upsampleP5(p5)  # 512->256
+        p4_cat1 = torch.cat([p4, p5_up], dim=1)  # 512 + 256 = 768
+        p4_1 = self.convP4_1(p4_cat1)  # 768->512
 
-        p4Up = self.upsample2(p4)
-        p3 = p3 + p4Up
+        # P4 -> P3
+        p4_up = self.upsampleP4(p4_1)  # 512->256
+        p3_cat1 = torch.cat([p3, p4_up], dim=1)  # 256 + 256 = 512
+        p3_out = self.convP3_1(p3_cat1)  # 512->256
 
-        # 下采样路径
-        p3Down = self.downSample1(p3)
-        p4 = p4 + p3Down
+        # 下采样路径（自底向上）
+        # P3 -> P4
+        p3_down = self.downsampleP3(p3_out)  # 256->256
+        p4_cat2 = torch.cat([p4_1, p3_down], dim=1)  # 512 + 256 = 768
+        p4_out = self.convP4_2(p4_cat2)  # 768->512
 
-        p4Down = self.downSample2(p4)
-        p5 = p5 + p4Down
+        # P4 -> P5
+        p4_down = self.downsampleP4(p4_out)  # 512->512
+        p5_cat2 = torch.cat([p5, p4_down], dim=1)  # 512 + 512 = 1024
+        p5_out = self.convP5_2(p5_cat2)  # 1024->512
 
-        # 最终特征图
-        p3 = self.convP3(p3)
-        p4 = self.convP4(p4)
-        p5 = self.convP5(p5)
-
-        return p3, p4, p5
+        return p3_out, p4_out, p5_out
 
 
 # YOLO检测头
@@ -220,9 +245,9 @@ class YOLOv4(nn.Module):
         self.neck = PathAggregationNetwork()
 
         # 检测头
-        self.headP3 = YoloHead(256, numAnchors, numClasses)
-        self.headP4 = YoloHead(512, numAnchors, numClasses)
-        self.headP5 = YoloHead(512, numAnchors, numClasses)
+        self.headP3 = YoloHead(256, numAnchors, numClasses)  # P3输出256通道
+        self.headP4 = YoloHead(512, numAnchors, numClasses)  # P4输出512通道
+        self.headP5 = YoloHead(512, numAnchors, numClasses)  # P5输出512通道
 
         # 初始化权重
         self._initializeWeights()
@@ -259,14 +284,17 @@ class YOLOv4(nn.Module):
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def main():
-
     model = YOLOv4(numClasses=20, numAnchors=3).to(device)
+
+    # 测试前向传播
+    with torch.no_grad():
+        x = torch.randn(2, 3, 416, 416).to(device)
+        outP3, outP4, outP5 = model(x)
+        print(f"P3 output shape: {outP3.shape}")  # [2, 3, 52, 52, 25]
+        print(f"P4 output shape: {outP4.shape}")  # [2, 3, 26, 26, 25]
+        print(f"P5 output shape: {outP5.shape}")  # [2, 3, 13, 13, 25]
 
     return model
 
-
-
 if __name__ == '__main__':
     main()
-
-

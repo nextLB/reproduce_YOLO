@@ -12,6 +12,8 @@ import YOLO_V1.models
 import YOLO_V1.loss
 import YOLO_V3.models
 import YOLO_V3.loss
+import YOLO_V4.models
+import YOLO_V4.loss
 import config_parameter
 import torch.optim as optim
 import torch
@@ -369,13 +371,77 @@ def YOLOV3_VOC2007_TRAIN_MAIN():
 
 
 
+def YOLOV4_VOC2007_TRAIN_MAIN():
+    # 创建模型存储的路径
+    nowTime = datetime.now()
+    saveModelPath = os.path.join('../YOLO_results/YOLO_V4', f'{nowTime.year}_{nowTime.day}_{nowTime.hour}_{nowTime.minute}_{nowTime.second}')
+    os.makedirs(saveModelPath, exist_ok=True)
 
+    # 创建TensorBoard日治目录
+    # 本地查看运行：tensorboard --logdir=YOLO_results/YOLO_V3/你的训练文件夹/tensorboard_logs
+    # 然后打开浏览器，访问 http://localhost:6006（默认端口）
+    # 网站服务器查看时，请运行 tensorboard dev upload --logdir YOLO_results/YOLO_V3/你的训练文件夹/tensorboard_logs
+    logDir = os.path.join(saveModelPath, 'YOLOV4_tensorboard_logs')
+    os.makedirs(logDir, exist_ok=True)
+    writer = SummaryWriter(log_dir=logDir)
+
+    # 创建与获取数据集
+    trainDataLoader, valDataLoader = datasets.VOC2007_MAIN()
+
+    # 创建与获取YOLOV3模型
+    model = YOLO_V4.models.main()
+
+    # 定义优化器与损失函数
+    optimizer = optim.SGD(model.parameters(), lr=config_parameter.LEARNING_RATE, momentum=config_parameter.MOMENTUM, weight_decay=config_parameter.WEIGHT_DECAY)
+
+    # 学习率调度器  多步学习率调度器   milestones=[50, 80]: 触发学习率调整的epoch位置   gamma=0.1: 学习率衰减的乘数因子
+    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[30, 50, 80], gamma=0.1)
+
+    # 记录模型图结构
+    sampleImages, _ = next(iter(trainDataLoader))
+    sampleImages = sampleImages.to(device)
+    writer.add_graph(model, sampleImages)
+
+
+    bestValLoss = float('inf')
+    globalStep = 0
+    # 训练循环
+    for epoch in range(config_parameter.MAX_EPOCHS):
+        model.train()
+        trainTotalLoss = 0
+        trainLoop = tqdm(trainDataLoader, desc="training")
+
+        # 记录每个epoch的训练损失分量累计值
+        epochCoordLoss = 0
+        epochObjLoss = 0
+        epochNoobjLoss = 0
+        epochClassLoss = 0
+        for batchIdx, (images, targets) in enumerate(trainLoop):
+            images = images.to(device)
+            targets = targets.to(device)
+
+            # 前向传播
+            predictions = model(images)
+
+            print(predictions[0].shape, targets.shape)
+
+
+
+
+    # 关闭TensorBoard writer
+    writer.close()
+
+    # 清除缓存
+    del model
+    gc.collect()
+    torch.cuda.empty_cache()
 
 
 
 if __name__ == '__main__':
     # YOLOV3_VOC2007_TRAIN_MAIN()
-    YOLOV1_VOC2007_TRAIN_MAIN()
+    # YOLOV1_VOC2007_TRAIN_MAIN()
+    YOLOV4_VOC2007_TRAIN_MAIN()
 
 
 
