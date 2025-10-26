@@ -28,6 +28,11 @@ from typing import List, Tuple, Dict, Optional
 import math
 
 
+# 基础卷积模块
+class ConvBlock(nn.Module):
+    def __init__(self, inCannels: int, outChannels: int, kernelSize: int, stride: int, groups: int):
+        super(ConvBlock, self).__init__()
+        padding = (kernelSize - 1) // 2
 
 
 
