@@ -88,7 +88,10 @@ Neck    --->    reshape(将resnet架构的输出reshape成yolov1检测头可以�
 
 Head    --->    DetectionNet(仿照原论文自主构建的简化的分类头)
 
+
 依照Resnet18架构的主干特征提取网络详细的模型架构图如下
+
+![V1.0版本的resnet18yolov1模型架构图](./images/resnet18_Yolov1_V1.0.png "V1.0版本的resnet18yolov1模型架构图")
 
 依照Resnet34架构的主干特征提取网络详细的模型架构图如下
 
