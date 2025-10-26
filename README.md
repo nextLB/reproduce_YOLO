@@ -60,6 +60,17 @@
 
         pip3 install -i https://pypi.tuna.tsinghua.edu.cn/simple tensorboard
     
+    hiddenlayer与graphviz配置
+
+        pip3 install -i https://pypi.tuna.tsinghua.edu.cn/simple hiddenlayer graphviz
+
+    torchviz配置
+
+        pip3 install -i https://pypi.tuna.tsinghua.edu.cn/simple torchviz
+
+    IPython配置
+
+        pip3 install -i https://pypi.tuna.tsinghua.edu.cn/simple ipython
 
 
 
@@ -76,6 +87,12 @@ Backbone  --->    resnet18(or resnet34 or resnet50)
 Neck    --->    reshape(将resnet架构的输出reshape成yolov1检测头可以接受的尺寸格式)
 
 Head    --->    DetectionNet(仿照原论文自主构建的简化的分类头)
+
+依照Resnet18架构的主干特征提取网络详细的模型架构图如下
+
+依照Resnet34架构的主干特征提取网络详细的模型架构图如下
+
+依照Resnet50架构的主干特征提取网络详细的模型架构图如下
 
 
 
@@ -260,6 +277,7 @@ Head    --->    DetectionNet(仿照原论文自主构建的简化的分类头)
                 ⊕ out2(512×26×26) → 768×26×26 → conv1 → 256×26×26 → YOLO头2(中目标检测)
                     ↓ 上采样2倍 → 128×52×52  
                     ⊕ out3(256×52×52) → 384×52×52 → conv2 → 128×52×52 → YOLO头3(小目标检测)
+
 
 
 ### *关于V1.0版本中YOLOV3的完整模型架构图*

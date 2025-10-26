@@ -11,8 +11,6 @@ import matplotlib.patches as patches
 
 
 
-
-
 # 获取训练数据集所有类别的函数
 def load_train_classes():
     readClassPath = os.path.join(config_path.TRAIN_DATA_PATH, 'ImageSets/Main')
@@ -131,6 +129,7 @@ def visualize_image_with_bboxes(imageData, boundingBoxes, figsize=(12, 8)):
 
     # 显示图像
     plt.show()
+
 
 
 

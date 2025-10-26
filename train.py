@@ -23,6 +23,8 @@ import os
 import gc
 from torch.utils.tensorboard import SummaryWriter
 
+import next_utils
+
 # 设置设备
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -48,6 +50,7 @@ def YOLOV1_VOC2007_TRAIN_MAIN():
     # 创建与获取YOLOV3模型
     model = YOLO_V1.models.YOLOv1ResNet().to(device)
 
+
     # 定义优化器与损失函数
     optimizer = optim.SGD(model.parameters(), lr=config_parameter.LEARNING_RATE, momentum=config_parameter.MOMENTUM, weight_decay=config_parameter.WEIGHT_DECAY)
 
@@ -62,6 +65,7 @@ def YOLOV1_VOC2007_TRAIN_MAIN():
     sampleImages, _ = next(iter(trainDataLoader))
     sampleImages = sampleImages.to(device)
     writer.add_graph(model, sampleImages)
+
 
     bestValLoss = float('inf')
     globalStep = 0
@@ -184,7 +188,7 @@ def YOLOV1_VOC2007_TRAIN_MAIN():
 
             if avgValLoss <= bestValLoss:
                 bestValLoss = avgValLoss
-                torch.save(model.state_dict(), os.path.join(saveModelPath, "YOLO_V3_low_loss.pth"))
+                torch.save(model.state_dict(), os.path.join(saveModelPath, "YOLO_V1_low_loss.pth"))
                 print(f"模型已保存至 {saveModelPath}")
 
 
@@ -534,8 +538,8 @@ def YOLOV4_VOC2007_TRAIN_MAIN():
 
 if __name__ == '__main__':
     # YOLOV3_VOC2007_TRAIN_MAIN()
-    # YOLOV1_VOC2007_TRAIN_MAIN()
-    YOLOV4_VOC2007_TRAIN_MAIN()
+    YOLOV1_VOC2007_TRAIN_MAIN()
+    # YOLOV4_VOC2007_TRAIN_MAIN()
 
 
 

@@ -29,16 +29,16 @@ class YOLOv1ResNet(nn.Module):
         self.depth = B * 5 + C
 
 
-        # Load backbone ResNet
-        self.backbone = resnet50(weights=ResNet50_Weights.DEFAULT)
-        self.backbone.requires_grad_(False)      # Freeze backbone weights
-
-        # Delete last two layers and attach detection layers
-        self.backbone.avgpool = nn.Identity()
-        self.backbone.fc = nn.Identity()
-
-        self.backboneReshape = Reshape(2048, 14, 14)
-        self.detectionNet = DetectionNet(2048)
+        # # Load backbone ResNet
+        # self.backbone = resnet50(weights=ResNet50_Weights.DEFAULT)
+        # self.backbone.requires_grad_(False)      # Freeze backbone weights
+        #
+        # # Delete last two layers and attach detection layers
+        # self.backbone.avgpool = nn.Identity()
+        # self.backbone.fc = nn.Identity()
+        #
+        # self.backboneReshape = Reshape(2048, 14, 14)
+        # self.detectionNet = DetectionNet(2048)
 
 
 
@@ -56,16 +56,16 @@ class YOLOv1ResNet(nn.Module):
 
 
 
-        # # Load backbone ResNet18 - 更小的模型
-        # self.backbone = resnet18(weights=ResNet18_Weights.DEFAULT)
-        # self.backbone.requires_grad_(False)      # Freeze backbone weights
-        #
-        # # Delete last two layers and attach detection layers
-        # self.backbone.avgpool = nn.Identity()
-        # self.backbone.fc = nn.Identity()
-        #
-        # self.backboneReshape = Reshape(512, 14, 14) # ResNet18的输出通道数也是512
-        # self.detectionNet = DetectionNet(512)       # 输入通道数保持512
+        # Load backbone ResNet18 - 更小的模型
+        self.backbone = resnet18(weights=ResNet18_Weights.DEFAULT)
+        self.backbone.requires_grad_(False)      # Freeze backbone weights
+
+        # Delete last two layers and attach detection layers
+        self.backbone.avgpool = nn.Identity()
+        self.backbone.fc = nn.Identity()
+
+        self.backboneReshape = Reshape(512, 14, 14) # ResNet18的输出通道数也是512
+        self.detectionNet = DetectionNet(512)       # 输入通道数保持512
 
 
         # 特征恒等映射层 用于捕捉训练过程中的特征图像
