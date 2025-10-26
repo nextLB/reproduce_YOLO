@@ -67,6 +67,7 @@ class YOLOv1ResNet(nn.Module):
         # self.backboneReshape = Reshape(512, 14, 14) # ResNet18的输出通道数也是512
         # self.detectionNet = DetectionNet(512)       # 输入通道数保持512
 
+
         # 特征恒等映射层 用于捕捉训练过程中的特征图像
         self.backbone_before_identity = nn.Identity()
         self.reshape_after_identity = nn.Identity()
