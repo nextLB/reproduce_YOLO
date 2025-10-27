@@ -33,6 +33,7 @@ class ConvBlock(nn.Module):
     def __init__(self, inCannels: int, outChannels: int, kernelSize: int, stride: int, groups: int):
         super(ConvBlock, self).__init__()
         padding = (kernelSize - 1) // 2
+        self.conv = nn.Conv2d(inCannels, outChannels, kernelSize, stride, padding, groups=groups, bias=False)
 
 
 

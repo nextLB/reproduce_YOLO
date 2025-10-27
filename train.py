@@ -23,7 +23,6 @@ import os
 import gc
 from torch.utils.tensorboard import SummaryWriter
 
-import next_utils
 
 # 设置设备
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
